@@ -1,6 +1,13 @@
 from qtpy.QtGui import QColor, QFont
-from qtpy.QtWidgets import (QAbstractItemView, QHBoxLayout, QListWidget,
-                            QListWidgetItem, QPushButton, QVBoxLayout, QWidget)
+from qtpy.QtWidgets import (
+    QAbstractItemView,
+    QHBoxLayout,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class ModalityControl(QWidget):

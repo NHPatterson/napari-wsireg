@@ -1,5 +1,11 @@
-from qtpy.QtWidgets import (QFormLayout, QHBoxLayout, QLineEdit, QPushButton,
-                            QVBoxLayout, QWidget)
+from qtpy.QtWidgets import (
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class ProjectControl(QWidget):

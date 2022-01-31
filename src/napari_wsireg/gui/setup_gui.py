@@ -7,8 +7,7 @@ from napari_wsireg.gui.setup_sub.modality import ModalityControl
 from napari_wsireg.gui.setup_sub.paths import RegistrationPathControl
 from napari_wsireg.gui.setup_sub.preprocessing import PreprocessingControl
 from napari_wsireg.gui.setup_sub.project import ProjectControl
-from napari_wsireg.gui.utils.colors import (ATTACHMENTS_COL, IMAGES_COL,
-                                            SHAPES_COL)
+from napari_wsireg.gui.utils.colors import ATTACHMENTS_COL, IMAGES_COL, SHAPES_COL
 
 
 class SetupTab(QWidget):

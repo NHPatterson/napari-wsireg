@@ -8,25 +8,33 @@ from napari.qt.threading import thread_worker
 from napari.utils import progress
 from napari_plugin_engine import napari_hook_implementation
 from qtpy.QtCore import QEvent, Qt
-from qtpy.QtWidgets import (QErrorMessage, QFileDialog, QHBoxLayout,
-                            QListWidget, QMenu, QWidget)
+from qtpy.QtWidgets import (
+    QErrorMessage,
+    QFileDialog,
+    QHBoxLayout,
+    QListWidget,
+    QMenu,
+    QWidget,
+)
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.reg_shapes import RegShapes
 from wsireg.wsireg2d import WsiReg2D
 
-from napari_wsireg.data import (FILE_ERROR_MESSAGE, TIFFFILE_EXTS,
-                                CziWsiRegImage, TiffFileWsiRegImage,
-                                WsiRegImage)
+from napari_wsireg.data import (
+    FILE_ERROR_MESSAGE,
+    TIFFFILE_EXTS,
+    CziWsiRegImage,
+    TiffFileWsiRegImage,
+    WsiRegImage,
+)
 from napari_wsireg.data.utils.image import guess_rgb
-from napari_wsireg.data.utils.transform import (centered_flip,
-                                                centered_transform)
+from napari_wsireg.data.utils.transform import centered_flip, centered_transform
 from napari_wsireg.gui.dialogs.add_merge import AddMerge
 from napari_wsireg.gui.dialogs.add_modality import AddModality
 from napari_wsireg.gui.setup_gui import SetupTab
 from napari_wsireg.gui.setup_sub.modality import create_modality_item
-from napari_wsireg.gui.utils.colors import (ATTACHMENTS_COL, IMAGES_COL,
-                                            SHAPES_COL)
+from napari_wsireg.gui.utils.colors import ATTACHMENTS_COL, IMAGES_COL, SHAPES_COL
 from napari_wsireg.gui.utils.file import open_file_dialog
 
 

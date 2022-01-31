@@ -8,12 +8,18 @@ from ome_types import from_xml
 from ome_types.model import OME
 from tifffile import TiffFile
 
-from napari_wsireg.data.utils.image import (compute_sub_res, get_tifffile_info,
-                                            guess_rgb, tifffile_to_dask)
-from napari_wsireg.data.utils.tifffile_meta import (ometiff_ch_names,
-                                                    ometiff_xy_pixel_sizes,
-                                                    svs_xy_pixel_sizes,
-                                                    tifftag_xy_pixel_sizes)
+from napari_wsireg.data.utils.image import (
+    compute_sub_res,
+    get_tifffile_info,
+    guess_rgb,
+    tifffile_to_dask,
+)
+from napari_wsireg.data.utils.tifffile_meta import (
+    ometiff_ch_names,
+    ometiff_xy_pixel_sizes,
+    svs_xy_pixel_sizes,
+    tifftag_xy_pixel_sizes,
+)
 from napari_wsireg.data.wsireg_image import WsiRegImage
 
 TIFFFILE_EXTS = [".scn", ".ome.tiff", ".tif", ".tiff", ".svs", ".ndpi"]

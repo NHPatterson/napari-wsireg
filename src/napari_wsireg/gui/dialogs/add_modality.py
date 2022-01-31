@@ -2,9 +2,18 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 from qtpy.QtGui import QDoubleValidator
-from qtpy.QtWidgets import (QComboBox, QDialog, QErrorMessage, QFormLayout,
-                            QHBoxLayout, QLabel, QLineEdit, QPushButton,
-                            QVBoxLayout, QWidget)
+from qtpy.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QErrorMessage,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 from napari_wsireg.data import CziWsiRegImage, TiffFileWsiRegImage

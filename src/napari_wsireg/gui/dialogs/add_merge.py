@@ -1,5 +1,11 @@
-from qtpy.QtWidgets import (QDialog, QErrorMessage, QFormLayout, QLabel,
-                            QLineEdit, QPushButton)
+from qtpy.QtWidgets import (
+    QDialog,
+    QErrorMessage,
+    QFormLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+)
 
 
 class AddMerge(QDialog):

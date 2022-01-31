@@ -1,6 +1,13 @@
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import (QComboBox, QFormLayout, QGroupBox, QLineEdit,
-                            QPushButton, QVBoxLayout, QWidget)
+from qtpy.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class RegistrationPathControl(QWidget):

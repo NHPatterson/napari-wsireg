@@ -1,7 +1,16 @@
 from typing import Any, Dict, Optional
 
-from qtpy.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QGroupBox,
-                            QLabel, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
+from qtpy.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QLabel,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 from superqt import QCollapsible
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
