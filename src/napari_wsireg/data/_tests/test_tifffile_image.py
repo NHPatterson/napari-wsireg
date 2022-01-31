@@ -6,7 +6,8 @@ import pytest
 
 from napari_wsireg.data import TiffFileWsiRegImage
 
-# private data logic borrowed from https://github.com/cgohlke/tifffile/tests/test_tifffile.py
+# private data logic borrowed from
+# https://github.com/cgohlke/tifffile/tests/test_tifffile.py
 HERE = Path(os.path.dirname(__file__))
 private_dir = HERE.parents[1] / "_tests" / "private_data"
 fixtures_dir = HERE.parents[1] / "_tests" / "fixtures"

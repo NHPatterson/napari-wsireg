@@ -20,7 +20,8 @@ class SetupTab(QWidget):
         self.setLayout(setup_layout)
         mod_header = QLabel()
         mod_header.setText(
-            f'<font color="{IMAGES_COL}"><b>Registration images</b></font> | <font color="{ATTACHMENTS_COL}"><b>Attachment images</b> '
+            f'<font color="{IMAGES_COL}"><b>Registration images</b></font> | '
+            f'<font color="{ATTACHMENTS_COL}"><b>Attachment images</b> '
             f'</font>| <font color="{SHAPES_COL}"><b>Attachment shapes</b></font>'
         )
 

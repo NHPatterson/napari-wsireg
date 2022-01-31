@@ -56,8 +56,6 @@ class CziRegImageReader(CziFile):
         out_shape = list(self.shape)
         start = list(self.start)
 
-        ch_dim_idx = self.axes.index("C")
-
         out_dtype = self.dtype
 
         if zarr_fp is not None:
@@ -83,7 +81,6 @@ class CziRegImageReader(CziFile):
             """Read, decode, and copy subblock data."""
             subblock = directory_entry.data_segment()
             dvstart = list(directory_entry.start)
-            czi_c_idx = [de.dimension for de in subblock.dimension_entries].index("C")
             tile = subblock.data(resize=resize, order=order)
 
             index = tuple(

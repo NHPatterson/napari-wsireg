@@ -522,7 +522,7 @@ class WsiReg2DMain(QWidget):
 
         if target_mod in ["None", ""]:
             emsg = QErrorMessage(self)
-            emsg.showMessage(f"Target modality must be set")
+            emsg.showMessage("Target modality must be set")
             return
 
         if source_mod == target_mod:
@@ -546,7 +546,7 @@ class WsiReg2DMain(QWidget):
 
         if len(reg_models) < 1:
             emsg = QErrorMessage(self)
-            emsg.showMessage(f"Registration models must be added")
+            emsg.showMessage("Registration models must be added")
             return
 
         self.reg_graph.add_reg_path(
@@ -716,7 +716,10 @@ class WsiReg2DMain(QWidget):
                     add_merge.setWindowModality(Qt.ApplicationModal)
                     add_merge.exec_()
                     if add_merge.completed:
-                        merge_tag = f'Merge - {add_merge.merge_tag.text()} - {" : ".join(mod_tags)}'
+                        merge_tag = (
+                            f"Merge - {add_merge.merge_tag.text()} "
+                            f'- {" : ".join(mod_tags)}'
+                        )
                         self.mod_list.addItem(merge_tag)
                 else:
                     emsg = QErrorMessage(self)

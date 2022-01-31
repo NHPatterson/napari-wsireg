@@ -56,8 +56,6 @@ def test_WsiReg2DMain_add_modalities(wsi_reg_fixture, capsys):
     att_mc_czi_im_name = wsi_reg_fixture.attachment_mods[3]
     att_rgb_czi_im_name = wsi_reg_fixture.attachment_mods[4]
 
-    shape_name = wsi_reg_fixture.shape_mods[0]
-
     assert len(wsi_reg_fixture.image_mods) > 0
     assert wsi_reg_fixture.image_spacings[rgb_im_name] == 1.0
     assert wsi_reg_fixture.image_spacings[mc_im_name] == 1.0
