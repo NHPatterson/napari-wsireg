@@ -1,13 +1,18 @@
 # napari-wsireg
 
-[![License](https://img.shields.io/pypi/l/napari-wsireg.svg?color=green)](https://github.com/nhpatterson/napari-wsireg/raw/main/LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/napari-wsireg.svg?color=green)](https://pypi.org/project/napari-wsireg)
-[![Python Version](https://img.shields.io/pypi/pyversions/napari-wsireg.svg?color=green)](https://python.org)
-[![tests](https://github.com/nhpatterson/napari-wsireg/workflows/tests/badge.svg)](https://github.com/nhpatterson/napari-wsireg/actions)
-[![codecov](https://codecov.io/gh/nhpatterson/napari-wsireg/branch/main/graph/badge.svg)](https://codecov.io/gh/nhpatterson/napari-wsireg)
-[![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-wsireg)](https://napari-hub.org/plugins/napari-wsireg)
+[//]: # ([![License]&#40;https://img.shields.io/pypi/l/napari-wsireg.svg?color=green&#41;]&#40;https://github.com/nhpatterson/napari-wsireg/raw/main/LICENSE&#41;)
 
-plugin to do whole slide image registration with wsireg
+[//]: # ([![PyPI]&#40;https://img.shields.io/pypi/v/napari-wsireg.svg?color=green&#41;]&#40;https://pypi.org/project/napari-wsireg&#41;)
+
+[//]: # ([![Python Version]&#40;https://img.shields.io/pypi/pyversions/napari-wsireg.svg?color=green&#41;]&#40;https://python.org&#41;)
+
+[//]: # ([![tests]&#40;https://github.com/nhpatterson/napari-wsireg/workflows/tests/badge.svg&#41;]&#40;https://github.com/nhpatterson/napari-wsireg/actions&#41;)
+
+[//]: # ([![codecov]&#40;https://codecov.io/gh/nhpatterson/napari-wsireg/branch/main/graph/badge.svg&#41;]&#40;https://codecov.io/gh/nhpatterson/napari-wsireg&#41;)
+
+[//]: # ([![napari hub]&#40;https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-wsireg&#41;]&#40;https://napari-hub.org/plugins/napari-wsireg&#41;)
+
+Plugin to perform whole slide image registration based on wsireg. This repo is a work and progress and this plugin is not yet functional.
 
 ----------------------------------
 

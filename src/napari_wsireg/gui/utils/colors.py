@@ -1,0 +1,3 @@
+IMAGES_COL = "#a6cee3"
+ATTACHMENTS_COL = "#1f78b4"
+SHAPES_COL = "#b2df8a"

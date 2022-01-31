@@ -1,21 +1,10 @@
 name: napari-wsireg
 display_name: napari-wsireg
 contributions:
-  commands: 
+  commands:
     - id: napari-wsireg.make_qwidget
-      python_name: napari_wsireg._widget:ExampleQWidget
-      title: Make example QWidget
-    - id: napari-wsireg.make_magic_widget
-      python_name: napari_wsireg._widget:example_magic_widget
-      title: Make example magic widget
-    - id: napari-wsireg.make_func_widget
-      python_name: napari_wsireg._widget:example_function_widget
-      title: Make example function widget   
+      python_name: napari_wsireg._widget:WsiReg2DMain
+      title: Open wsireg for 2D image registration
   widgets:
     - command: napari-wsireg.make_qwidget
-      display_name: Example QWidget
-    - command: napari-wsireg.make_magic_widget
-      display_name: Example Magic Widget
-    - command: napari-wsireg.make_func_widget
-      autogenerate: true
-      display_name: Example Function Widget 
+      display_name: wsireg2D Main
