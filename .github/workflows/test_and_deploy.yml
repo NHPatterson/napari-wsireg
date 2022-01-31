@@ -3,17 +3,15 @@
 
 name: tests
 
-on: 
+on:
   push:
     branches:
       - main
-      - npe2
     tags:
       - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
   pull_request:
     branches:
       - main
-      - npe2
   workflow_dispatch:
 
 jobs:
@@ -54,9 +52,7 @@ jobs:
 
       # this runs the platform-specific tests declared in tox.ini
       - name: Test with tox
-        uses: GabrielBB/xvfb-action@v1
-        with:
-          run: tox
+        run: tox
         env:
           PLATFORM: ${{ matrix.platform }}
 
@@ -65,7 +61,7 @@ jobs:
 
   deploy:
     # this will run when you have tagged a commit, starting with "v*"
-    # and requires that you have put your twine API key in your 
+    # and requires that you have put your twine API key in your
     # github secrets (see readme for details)
     needs: [test]
     runs-on: ubuntu-latest
@@ -88,4 +84,3 @@ jobs:
           git tag
           python -m build .
           twine upload dist/*
-
