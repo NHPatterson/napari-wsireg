@@ -1,4 +1,3 @@
-from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -32,6 +31,7 @@ class RegistrationPathControl(QWidget):
 
         self.reg_models = QComboBox()
         self.add_reg_model = QPushButton("Add reg model")
+        self.clear_all_paths = QPushButton("Clear reg paths")
 
         self.current_reg_models = QLineEdit()
         self.current_reg_models.setReadOnly(True)
@@ -55,4 +55,7 @@ class RegistrationPathControl(QWidget):
         self.setLayout(main_layout)
         self.layout().addWidget(select_src)
         self.layout().addWidget(self.select_path_gbox)
-        self.layout().addWidget(self.add_reg_path, alignment=Qt.AlignRight)
+        form = QFormLayout()
+        form.addRow(self.clear_all_paths, self.add_reg_path)
+        self.layout().addLayout(form)
+        # self.layout().addWidget(self.add_reg_path, alignment=Qt.AlignRight)

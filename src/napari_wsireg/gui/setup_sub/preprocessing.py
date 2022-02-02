@@ -25,11 +25,9 @@ class PreprocessingControl(QGroupBox):
 
         self.setLayout(QVBoxLayout())
 
-        mod_select_widg = QWidget()
-        mod_select = QFormLayout()
+        mod_select_layout = QFormLayout()
         self.mod_in_prepro = QLabel("[none selected]")
-        mod_select.addRow("Selected modality", self.mod_in_prepro)
-        mod_select_widg.setLayout(mod_select)
+        mod_select_layout.addRow("Selected modality", self.mod_in_prepro)
 
         self.image_type = QComboBox()
         self.image_type.addItem("Fluorescence")
@@ -115,7 +113,8 @@ class PreprocessingControl(QGroupBox):
         self.selection_widg.addTab(spat_widg, "Spatial")
 
         if in_dock:
-            self.layout().addWidget(mod_select_widg)
+            self.layout().addLayout(mod_select_layout)
+
         self.layout().addWidget(self.selection_widg)
 
         self.image_type.currentTextChanged.connect(self._change_type)

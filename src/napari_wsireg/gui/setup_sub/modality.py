@@ -16,7 +16,9 @@ class ModalityControl(QWidget):
 
         widg_layout = QHBoxLayout()
         widg_layout.addStretch()
-        widg_layout.setSpacing(0)
+        widg_layout.setSpacing(10)
+        self.setMaximumHeight(200)
+
         self.setLayout(widg_layout)
 
         self.mod_list = QListWidget()
@@ -42,16 +44,15 @@ class ModalityControl(QWidget):
         self.add_mod_btn.setFont(btn_font)
         self.edt_mod_btn.setFont(btn_font)
 
-        self.sub_widg = QWidget()
-        self.sub_widg.setMaximumHeight(175)
-        self.sub_widg.setLayout(QVBoxLayout())
+        btn_layout = QVBoxLayout()
+
         self.layout().addWidget(self.mod_list)
-        self.sub_widg.layout().addWidget(self.add_mod_btn)
-        self.sub_widg.layout().addWidget(self.add_ach_btn)
-        self.sub_widg.layout().addWidget(self.add_shp_btn)
-        self.sub_widg.layout().addWidget(self.del_mod_btn)
-        self.sub_widg.layout().addWidget(self.edt_mod_btn)
-        self.layout().addWidget(self.sub_widg)
+        btn_layout.addWidget(self.add_mod_btn)
+        btn_layout.addWidget(self.add_ach_btn)
+        btn_layout.addWidget(self.add_shp_btn)
+        btn_layout.addWidget(self.del_mod_btn)
+        btn_layout.addWidget(self.edt_mod_btn)
+        self.layout().addLayout(btn_layout)
         widg_layout.addStretch()
 
 

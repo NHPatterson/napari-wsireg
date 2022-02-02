@@ -11,10 +11,11 @@ from qtpy.QtCore import QEvent, Qt
 from qtpy.QtWidgets import (
     QErrorMessage,
     QFileDialog,
-    QHBoxLayout,
+    QVBoxLayout,
     QListWidget,
     QMenu,
     QWidget,
+    QScrollArea,
 )
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.parameter_maps.reg_model import RegModel
@@ -55,7 +56,8 @@ class WsiReg2DMain(QWidget):
         self.image_spacings: Dict[str, float] = dict()
         self.image_to_attach: Dict[str, List[str]] = dict()
 
-        main_layout = QHBoxLayout()
+        main_layout = QVBoxLayout()
+        main_layout.setAlignment(Qt.AlignTop)
         self.setLayout(main_layout)
         self.setup = SetupTab()
 
@@ -76,6 +78,8 @@ class WsiReg2DMain(QWidget):
         self.add_reg_model = self.setup.path_ctrl.add_reg_model
         self.current_reg_models = self.setup.path_ctrl.current_reg_models
 
+        self.graph_view = self.setup.graph_view
+
         model_names = [m.name for m in RegModel]
         model_names.append("from file")
         model_names.append("[reset]")
@@ -91,9 +95,14 @@ class WsiReg2DMain(QWidget):
         self.output_dir_select = self.setup.proj_ctrl.output_dir_select
         self.output_dir_entry = self.setup.proj_ctrl.output_dir_entry
 
-        self.layout().addWidget(self.setup)
-        self.layout().setAlignment(self.setup, Qt.AlignTop)
-        main_layout.addStretch(True)
+        scroll = QScrollArea()
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(self.setup)
+        self.layout().addWidget(scroll)
+        # self.layout().setAlignment(scroll, Qt.AlignTop)
+        # main_layout.addStretch(True)
 
         self.add_mod_btn.clicked.connect(lambda: self.add_data("image"))
         self.add_ach_btn.clicked.connect(lambda: self.add_data("attachment"))
@@ -147,6 +156,8 @@ class WsiReg2DMain(QWidget):
 
         self.path_ctrl.add_reg_path.clicked.connect(self.add_reg_path_to_graph)
 
+        self.graph_view.refresh_graph.clicked.connect(self._update_reg_plot)
+
         # project management connections
         self.output_dir_select.clicked.connect(self.set_project_output_dir)
 
@@ -183,6 +194,8 @@ class WsiReg2DMain(QWidget):
                     self._add_attachment_data(file_path, no_dialog)
                 else:
                     self._add_shape_data(file_path, no_dialog)
+
+                self._update_reg_plot()
 
     def _generate_random_name(self) -> str:
         import random
@@ -552,42 +565,33 @@ class WsiReg2DMain(QWidget):
         self.reg_graph.add_reg_path(
             source_mod, target_mod, thru_modality=thru_mod, reg_params=reg_models
         )
+        self._update_reg_plot()
 
     def delete_modality(self):
-        mod_tag, _, _ = self._get_current_mod_item()
+        mod_tags = self._get_all_selected_mod_tags()
+        for mod_tag in mod_tags:
+            self.reg_graph.remove_modality(mod_tag)
+            self.current_mod_in_prepro.setText("[none selected]")
+            self._update_preprocessing()
+            self.mod_list.takeItem(self.mod_list.currentRow())
 
-        self.mod_list.takeItem(self.mod_list.currentRow())
+            if mod_tag in self.image_mods:
+                self.image_mods.pop(self.image_mods.index(mod_tag))
+                current_items = [
+                    self.path_ctrl.source_select.itemText(i)
+                    for i in range(self.path_ctrl.source_select.count())
+                ]
+                rm_idx = current_items.index(mod_tag)
+                self.path_ctrl.source_select.removeItem(rm_idx)
+                self._update_path_possibilties()
 
-        if mod_tag in self.image_mods:
-            self.reg_graph.modalities[mod_tag] = None
-            self.image_mods.pop(self.image_mods.index(mod_tag))
-            current_items = [
-                self.path_ctrl.source_select.itemText(i)
-                for i in range(self.path_ctrl.source_select.count())
-            ]
-            rm_idx = current_items.index(mod_tag)
-            self.path_ctrl.source_select.removeItem(rm_idx)
-            self._update_path_possibilties()
-            self.reg_graph.modality_names.pop(
-                self.reg_graph.modality_names.index(mod_tag)
-            )
-            self.reg_graph.n_modalities -= 1
+            if mod_tag in self.attachment_mods:
+                self.attachment_mods.pop(self.attachment_mods.index(mod_tag))
 
-        if mod_tag in self.attachment_mods:
-            self.reg_graph.modalities[mod_tag] = None
-            self.reg_graph.attachment_images[mod_tag] = None
-            self.attachment_mods.pop(self.attachment_mods.index(mod_tag))
-            self.reg_graph.modality_names.pop(
-                self.reg_graph.modality_names.index(mod_tag)
-            )
-            self.reg_graph.n_modalities -= 1
+            if mod_tag in self.shape_mods:
+                self.shape_mods.pop(self.shape_mods.index(mod_tag))
 
-        if mod_tag in self.shape_mods:
-            self.reg_graph.shape_sets[mod_tag] = None
-            self.shape_mods.pop(self.shape_mods.index(mod_tag))
-            self.reg_graph.shape_set_names.pop(
-                self.reg_graph.shape_set_names.index(mod_tag)
-            )
+            self._update_reg_plot()
 
     def set_project_output_dir(self, file_path: Optional[Union[str, Path]]) -> None:
         if not file_path:
@@ -809,6 +813,9 @@ class WsiReg2DMain(QWidget):
             for mod in associated_mods:
                 layer = self.layer_data[mod]
                 layer.affine = transform
+
+    def _update_reg_plot(self):
+        self.graph_view.plot(self.reg_graph)
 
 
 @napari_hook_implementation

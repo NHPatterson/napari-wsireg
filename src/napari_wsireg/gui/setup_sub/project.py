@@ -14,7 +14,6 @@ class ProjectControl(QWidget):
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
 
-        proj_entry_widg = QWidget()
         proj_entry_layout = QFormLayout()
 
         self.project_name_entry = QLineEdit()
@@ -27,9 +26,7 @@ class ProjectControl(QWidget):
 
         proj_entry_layout.addRow("Set project name", self.project_name_entry)
         proj_entry_layout.addRow(self.output_dir_select, self.output_dir_entry)
-        proj_entry_widg.setLayout(proj_entry_layout)
 
-        action_widg = QWidget()
         action_layout = QHBoxLayout()
 
         self.write_config = QPushButton("Save config")
@@ -42,7 +39,6 @@ class ProjectControl(QWidget):
         action_layout.addWidget(self.write_config)
         action_layout.addWidget(self.add_to_queue)
         action_layout.addWidget(self.run_reg)
-        action_widg.setLayout(action_layout)
 
-        self.layout().addWidget(proj_entry_widg)
-        self.layout().addWidget(action_widg)
+        self.layout().addLayout(proj_entry_layout)
+        self.layout().addLayout(action_layout)
