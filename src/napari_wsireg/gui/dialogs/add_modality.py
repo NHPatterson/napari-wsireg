@@ -7,7 +7,7 @@ from qtpy.QtWidgets import (
     QDialog,
     QErrorMessage,
     QFormLayout,
-    QHBoxLayout,
+    QCheckBox,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -59,9 +59,21 @@ class AddModality(QDialog):
             self.tag.setReadOnly(True)
             self.spacing.setReadOnly(True)
 
-        form_layout.addRow("Image filepath", QLabel(Path(file_path).name))
+        image_fp_label = QLineEdit()
+        image_fp_label.setReadOnly(True)
+        image_fp_label.setStyleSheet("background-color:rgb(38, 41, 48); border:0px")
+        image_fp_label.setText(Path(file_path).name)
+        image_fp_label.setFixedWidth(350)
+        image_fp_label.setCursorPosition(0)
+
+        form_layout.addRow("Image filepath", image_fp_label)
         form_layout.addRow("Image tag (name)", self.tag)
         form_layout.addRow("Set image pixel spacing (μm)", self.spacing)
+        if mode == "load":
+            tn_label = QLabel("Read thumbnail?")
+            self.use_thumbnail = QCheckBox()
+            self.use_thumbnail.setChecked(True)
+            form_layout.addRow(tn_label, self.use_thumbnail)
 
         if attachment:
             self.attachment_combo = self._create_combo_group(attachment_tags)
@@ -83,24 +95,26 @@ class AddModality(QDialog):
             if preprocessing:
                 self.prepro_cntrl._import_data(preprocessing)
 
-        btn_widg = QWidget()
-        bottom_btns = QHBoxLayout()
+        bottom_layout = QFormLayout()
         if mode == "load":
-            self.add_mod_to_wsireg = QPushButton("Add modality")
+            self.add_mod_to_wsireg = QPushButton(
+                "Add attachment" if attachment else "Add Modality"
+            )
             self.cancel_add = QPushButton("Cancel add")
+
         elif mode == "edit":
             self.add_mod_to_wsireg = QPushButton("Finish edits")
             self.cancel_add = QPushButton("Cancel edits")
 
-        bottom_btns.addWidget(self.cancel_add)
-        bottom_btns.addWidget(self.add_mod_to_wsireg)
-        btn_widg.setLayout(bottom_btns)
-        self.layout().addWidget(btn_widg)
+        bottom_layout.addRow(self.cancel_add, self.add_mod_to_wsireg)
+
+        self.layout().addLayout(bottom_layout)
         self.completed = False
 
         self.cancel_add.clicked.connect(self._cancel)
         self.add_mod_to_wsireg.clicked.connect(self._add)
 
+        self.tag.setFocus()
         self.add_mod_to_wsireg.setDefault(True)
 
         if self.image_data:
