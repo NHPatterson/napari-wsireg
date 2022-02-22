@@ -10,6 +10,7 @@ from napari_plugin_engine import napari_hook_implementation
 from qtpy.QtCore import QEvent, Qt
 from qtpy.QtWidgets import (
     QErrorMessage,
+    QMessageBox,
     QFileDialog,
     QVBoxLayout,
     QListWidget,
@@ -21,6 +22,7 @@ from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.reg_shapes import RegShapes
 from wsireg.wsireg2d import WsiReg2D
+from wsireg.wsireg2d import main as wsireg2d_main
 
 from napari_wsireg.data import (
     FILE_ERROR_MESSAGE,
@@ -35,7 +37,6 @@ from napari_wsireg.gui.dialogs.add_merge import AddMerge
 from napari_wsireg.gui.dialogs.add_modality import AddModality
 from napari_wsireg.gui.setup_gui import SetupTab
 from napari_wsireg.gui.setup_sub.modality import create_modality_item
-from napari_wsireg.gui.utils.colors import ATTACHMENTS_COL, IMAGES_COL, SHAPES_COL
 from napari_wsireg.gui.utils.file import open_file_dialog
 
 
@@ -45,16 +46,18 @@ class WsiReg2DMain(QWidget):
 
         self.viewer = napari_viewer
 
-        self.reg_graph = WsiReg2D(None, None)
+        self.reg_graph: WsiReg2D = WsiReg2D(None, None)
+        self.graph_queue: List[Tuple[WsiReg2D, Dict[str, bool]]] = []
 
         self.image_mods: List[str] = []
         self.attachment_mods: List[str] = []
         self.shape_mods: List[str] = []
+        self.merge_mods: Dict[str, List[str]] = dict()
 
         self.image_data: Dict[str, WsiRegImage] = dict()
         self.layer_data: Dict[str, Any] = dict()
         self.image_spacings: Dict[str, float] = dict()
-        self.image_to_attach: Dict[str, List[str]] = dict()
+        self.attachment_keys: Dict[str, List[str]] = dict()
 
         main_layout = QVBoxLayout()
         main_layout.setAlignment(Qt.AlignTop)
@@ -101,6 +104,7 @@ class WsiReg2DMain(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.setup)
         self.layout().addWidget(scroll)
+
         # self.layout().setAlignment(scroll, Qt.AlignTop)
         # main_layout.addStretch(True)
 
@@ -160,6 +164,8 @@ class WsiReg2DMain(QWidget):
 
         # project management connections
         self.output_dir_select.clicked.connect(self.set_project_output_dir)
+        self.write_config_btn.clicked.connect(self.save_graph_config)
+        self.run_reg_btn.clicked.connect(self.run_registration)
 
     def add_data(
         self,
@@ -171,13 +177,19 @@ class WsiReg2DMain(QWidget):
         Collect image modality path
         """
         if not file_paths_in:
-            file_paths = open_file_dialog(
-                self,
-                single=False,
-                wd="",
-                name="Open image(s) for registration",
-                file_types="All Files (*);;Tiff files (*.tiff,*.tif)",
-            )
+            if data_type in ["shape", "attachment"] and len(self.image_mods) == 0:
+                emsg = QErrorMessage(self)
+                emsg.showMessage(
+                    f"No image modalities are loaded for attachment of {data_type} data"
+                )
+                file_paths = None
+            else:
+                file_paths = open_file_dialog(
+                    self,
+                    single=False,
+                    wd="",
+                    data_type=data_type,
+                )
         # if statement checks that open file dialog returned something
         else:
             file_paths = file_paths_in
@@ -238,28 +250,31 @@ class WsiReg2DMain(QWidget):
                 added_mod.tag.setText(rstr)
                 added_mod.completed = True
 
-            text_color = IMAGES_COL
-
             if added_mod.completed:
                 mod_tag = str(added_mod.tag.text())
                 mod_spacing = float(added_mod.spacing.text())
                 mod_path = Path(file_path).name
-                list_name = f"{mod_tag} : {mod_path} : {mod_spacing} (μm)"
-                mod_item = create_modality_item(list_name, text_color)
+                display_name = f"{mod_tag} : {mod_path} : {mod_spacing} (μm)"
+                mod_item = create_modality_item(
+                    mod_tag, mod_path, mod_spacing, "IMAGE", display_name
+                )
                 self.mod_list.addItem(mod_item)
                 preprocessing = added_mod.prepro_cntrl._export_data()
                 self.reg_graph.add_modality(
                     mod_tag, file_path, mod_spacing, preprocessing=preprocessing
                 )
                 self.image_mods.append(mod_tag)
-                self.image_to_attach.update({mod_tag: []})
 
                 self.path_ctrl.source_select.addItem(mod_tag)
                 self.image_data.update({mod_tag: image_data})
                 self.image_spacings.update({mod_tag: mod_spacing})
 
-                self._run_add_image(mod_tag, image_data, use_thumbnail=False)
-
+                self._run_add_image(
+                    mod_tag,
+                    image_data,
+                    use_thumbnail=added_mod.use_thumbnail.isChecked(),
+                )
+                self.attachment_keys.update({mod_tag: []})
                 self._update_path_possibilties()
 
     def _run_add_image(
@@ -288,7 +303,10 @@ class WsiReg2DMain(QWidget):
         image_data: Union[TiffFileWsiRegImage, CziWsiRegImage],
         use_thumbnail: bool = False,
     ):
-        image_data.prepare_image_data()
+        if isinstance(image_data, TiffFileWsiRegImage) or not use_thumbnail:
+            image_data.prepare_image_data()
+        elif isinstance(image_data, CziWsiRegImage) and use_thumbnail:
+            image_data._get_thumbnail()
         return mod_tag, image_data, use_thumbnail
 
     def _add_image_to_viewer(
@@ -351,8 +369,6 @@ class WsiReg2DMain(QWidget):
                     added_mod.tag.setText(rstr)
                     added_mod.completed = True
 
-                text_color = ATTACHMENTS_COL
-
             except UnboundLocalError:
                 return
 
@@ -360,18 +376,27 @@ class WsiReg2DMain(QWidget):
             mod_tag = str(added_mod.tag.text())
             mod_spacing = float(added_mod.spacing.text())
             mod_path = Path(file_path).name
-            list_name = f"{mod_tag} : {mod_path} : {mod_spacing} (μm)"
-            mod_item = create_modality_item(list_name, text_color)
-            self.mod_list.addItem(mod_item)
             attachment_modality = added_mod.attachment_combo.currentText()
+            display_name = f"{mod_tag} : {mod_path} : {mod_spacing} (μm)"
+            mod_item = create_modality_item(
+                mod_tag,
+                mod_path,
+                mod_spacing,
+                "ATTACHMENT_IMAGE",
+                display_name,
+                attachment_modality=attachment_modality,
+            )
+            self.mod_list.addItem(mod_item)
             self.reg_graph.add_attachment_images(
                 attachment_modality, mod_tag, file_path, mod_spacing
             )
             self.image_data.update({mod_tag: image_data})
             self.image_spacings.update({mod_tag: mod_spacing})
-            self._run_add_image(mod_tag, image_data, use_thumbnail=True)
+            self._run_add_image(
+                mod_tag, image_data, use_thumbnail=added_mod.use_thumbnail.isChecked()
+            )
             self.attachment_mods.append(mod_tag)
-            self.image_to_attach[attachment_modality].append(mod_tag)
+            self.attachment_keys[attachment_modality].append(mod_tag)
 
     def _add_shape_data(self, file_path: Union[str, Path], no_dialog: bool = False):
 
@@ -393,21 +418,26 @@ class WsiReg2DMain(QWidget):
             added_mod.tag.setText(rstr)
             added_mod.completed = True
 
-        text_color = SHAPES_COL
-
         if added_mod.completed:
             mod_tag = str(added_mod.tag.text())
             mod_spacing = float(added_mod.spacing.text())
             mod_path = Path(file_path).name
-            list_name = f"{mod_tag} : {mod_path} : {mod_spacing} (μm)"
-            mod_item = create_modality_item(list_name, text_color)
-            self.mod_list.addItem(mod_item)
             attachment_modality = added_mod.attachment_combo.currentText()
+            display_name = f"{mod_tag} : {mod_path} : {mod_spacing} (μm)"
+            mod_item = create_modality_item(
+                mod_tag,
+                mod_path,
+                mod_spacing,
+                "SHAPE",
+                display_name,
+                attachment_modality=attachment_modality,
+            )
+            self.mod_list.addItem(mod_item)
             self.reg_graph.add_attachment_shapes(
                 attachment_modality, mod_tag, file_path
             )
             self.shape_mods.append(mod_tag)
-            self.image_to_attach[attachment_modality].append(mod_tag)
+            self.attachment_keys[attachment_modality].append(mod_tag)
             self._add_shapes_to_viewer(mod_tag, shape_data, mod_spacing)
 
     def _add_shapes_to_viewer(
@@ -438,25 +468,28 @@ class WsiReg2DMain(QWidget):
 
     def _get_current_mod_item(self):
         mod_item = self.mod_list.currentItem()
-        mod_text = mod_item.text()
-        mod_tag, mod_path, mod_spacing = mod_text.split(" : ")
-        return mod_tag, mod_path, mod_spacing
+        return (
+            mod_item.mod_tag,
+            mod_item.mod_path,
+            mod_item.mod_spacing,
+            mod_item.mod_type,
+        )
 
-    def _get_all_selected_mod_tags(self):
+    def _get_all_selected_mod_tags(self) -> List[Tuple[str, Any]]:
         mod_items = self.mod_list.selectedItems()
-        mod_texts = [item.text() for item in mod_items]
-        return [m.split(" : ")[0] for m in mod_texts]
+        mod_data = [(m.mod_tag, m.mod_type) for m in mod_items]
+        return mod_data
 
     def _edit_data(self):
-        if self.mod_list.currentItem().text()[:7] == "Merge -":
+        mod_tag, mod_path, mod_spacing, mod_type = self._get_current_mod_item()
+
+        if mod_type.name == "MERGE":
             return
 
-        mod_tag, mod_path, mod_spacing = self._get_current_mod_item()
-
-        if mod_tag in self.image_mods:
+        if mod_type.name == "IMAGE":
             preprocessing = self.reg_graph.modalities[mod_tag]["preprocessing"]
 
-        if mod_tag in self.attachment_mods or mod_tag in self.shape_mods:
+        if mod_type.name in ["SHAPE", "ATTACHMENT_IMAGE"]:
             attachment = True
         else:
             attachment = False
@@ -483,9 +516,9 @@ class WsiReg2DMain(QWidget):
             self._update_preprocessing()
 
     def _switch_preprocessing_modality(self):
-        mod_tag, _, _ = self._get_current_mod_item()
+        mod_tag, _, _, mod_type = self._get_current_mod_item()
 
-        if mod_tag in self.image_mods:
+        if mod_type.name == "IMAGE":
             self.current_mod_in_prepro.setText(mod_tag)
             prepro_params = deepcopy(
                 self.reg_graph.modalities[mod_tag]["preprocessing"]
@@ -567,29 +600,104 @@ class WsiReg2DMain(QWidget):
         )
         self._update_reg_plot()
 
+    def _clear_attachment_keys(self, attachment_key: str) -> None:
+        for k, v in self.attachment_keys.items():
+            if attachment_key in v:
+                v.pop(v.index(attachment_key))
+
     def delete_modality(self):
-        mod_tags = self._get_all_selected_mod_tags()
-        for mod_tag in mod_tags:
-            self.reg_graph.remove_modality(mod_tag)
-            self.current_mod_in_prepro.setText("[none selected]")
-            self._update_preprocessing()
+        mod_data = self._get_all_selected_mod_tags()
+        all_associated_mods = []
+        for mod_tag, mod_type in mod_data:
+
             self.mod_list.takeItem(self.mod_list.currentRow())
+            if mod_type.name not in ["MERGE", "MASK"]:
+                self.reg_graph.remove_modality(mod_tag)
+                self.current_mod_in_prepro.setText("[none selected]")
+                self._update_preprocessing()
 
-            if mod_tag in self.image_mods:
-                self.image_mods.pop(self.image_mods.index(mod_tag))
-                current_items = [
-                    self.path_ctrl.source_select.itemText(i)
-                    for i in range(self.path_ctrl.source_select.count())
+                if mod_type.name == "IMAGE":
+                    self.image_mods.pop(self.image_mods.index(mod_tag))
+                    current_items = [
+                        self.path_ctrl.source_select.itemText(i)
+                        for i in range(self.path_ctrl.source_select.count())
+                    ]
+                    rm_idx = current_items.index(mod_tag)
+                    self.path_ctrl.source_select.removeItem(rm_idx)
+                    self._update_path_possibilties()
+                    associated_mods = self.attachment_keys[mod_tag]
+                    all_associated_mods.extend(associated_mods)
+
+                if mod_type.name == "ATTACHMENT_IMAGE":
+                    self.attachment_mods.pop(self.attachment_mods.index(mod_tag))
+                    self._clear_attachment_keys(mod_tag)
+
+                if mod_type.name == "SHAPE":
+                    self.shape_mods.pop(self.shape_mods.index(mod_tag))
+                    self._clear_attachment_keys(mod_tag)
+
+                ld = self.layer_data.pop(mod_tag)
+                self.viewer.layers.pop(self.viewer.layers.index(ld.name))
+
+            elif mod_type.name == "MERGE":
+                self.merge_mods.pop(mod_tag)
+                self.reg_graph.remove_merge_modality(mod_tag)
+
+            to_rm = []
+            for merge_name, merge_mods in self.merge_mods.items():
+                if mod_tag in merge_mods:
+                    to_rm.append(merge_name)
+                    msg = QMessageBox(self)
+                    msg.setIcon(QMessageBox.Warning)
+                    msg.setText("Merge modality removed")
+                    msg.setInformativeText(
+                        f"{mod_tag} was assoicated with a merge modality with tag {merge_name} and"
+                        f" {merge_name} was removed from the merge modalities"
+                    )
+                    msg.setWindowTitle(
+                        f"{merge_name} - removed with associated data {mod_tag}"
+                    )
+                    msg.setWindowModality(Qt.NonModal)
+                    msg.exec_()
+                    mod_tags = [
+                        self.mod_list.item(ii).mod_tag
+                        for ii in range(self.mod_list.count())
+                    ]
+                    merge_idx = mod_tags.index(merge_name)
+                    self.mod_list.takeItem(merge_idx)
+
+            [self.merge_mods.pop(rm) for rm in to_rm]
+
+            for assoc_mod in all_associated_mods:
+                self.reg_graph.remove_modality(assoc_mod)
+                all_mod_tags = [
+                    self.mod_list.item(ii).mod_tag
+                    for ii in range(self.mod_list.count())
                 ]
-                rm_idx = current_items.index(mod_tag)
-                self.path_ctrl.source_select.removeItem(rm_idx)
-                self._update_path_possibilties()
 
-            if mod_tag in self.attachment_mods:
-                self.attachment_mods.pop(self.attachment_mods.index(mod_tag))
+                rm_idx = all_mod_tags.index(assoc_mod)
+                self.mod_list.takeItem(rm_idx)
 
-            if mod_tag in self.shape_mods:
-                self.shape_mods.pop(self.shape_mods.index(mod_tag))
+                ld = self.layer_data.pop(assoc_mod)
+                self.viewer.layers.pop(self.viewer.layers.index(ld.name))
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Warning)
+                msg.setText("Associated modality has been removed")
+                msg.setInformativeText(
+                    f"<b>{mod_tag}</b> had assoicated data with tag <b>{assoc_mod}</b> and"
+                    f" <b>{assoc_mod}</b> was removed\n"
+                    f"<i>N.B.</i>: wsireg attachment modalities cannot be specified unattached"
+                )
+                msg.setWindowModality(Qt.NonModal)
+                msg.setWindowTitle(
+                    f"{mod_tag} - associated data removal warning: {assoc_mod}"
+                )
+                msg.exec_()
+
+                if assoc_mod in self.attachment_mods:
+                    self.attachment_mods.pop(self.attachment_mods.index(assoc_mod))
+                elif assoc_mod in self.shape_mods:
+                    self.shape_mods.pop(self.shape_mods.index(assoc_mod))
 
             self._update_reg_plot()
 
@@ -708,23 +816,28 @@ class WsiReg2DMain(QWidget):
             menu.addAction("Merge modalities in file after transformation")
 
             if menu.exec_(event.globalPos()):
-                mod_tags = self._get_all_selected_mod_tags()
-                all_mergable_mods = deepcopy(self.image_mods) + deepcopy(
-                    self.attachment_mods
+                mod_data = self._get_all_selected_mod_tags()
+                mod_tags = [m[0] for m in mod_data]
+                mod_types = [m[1].name for m in mod_data]
+
+                all_mergable = all(
+                    tuple([mt in ["IMAGE", "ATTACHMENT_IMAGE"] for mt in mod_types])
                 )
-                all_mergable = all(item in all_mergable_mods for item in mod_tags)
+
                 if all_mergable:
                     merge_str = ", ".join(mod_tags)
                     add_merge = AddMerge(merge_str, parent=self)
                     add_merge.setWindowTitle("Enter modality merge information...")
                     add_merge.setWindowModality(Qt.ApplicationModal)
                     add_merge.exec_()
+                    merge_tag = add_merge.merge_tag.text()
                     if add_merge.completed:
-                        merge_tag = (
-                            f"Merge - {add_merge.merge_tag.text()} "
-                            f'- {" : ".join(mod_tags)}'
+                        display_name = f"Merge -{merge_tag}" f'- {" : ".join(mod_tags)}'
+                        mod_item = create_modality_item(
+                            merge_tag, "", 1.0, "MERGE", display_name
                         )
-                        self.mod_list.addItem(merge_tag)
+                        self.mod_list.addItem(mod_item)
+                        self.merge_mods.update({merge_tag: mod_tags})
                 else:
                     emsg = QErrorMessage(self)
                     emsg.showMessage(
@@ -733,68 +846,80 @@ class WsiReg2DMain(QWidget):
             return True
         return super().eventFilter(source, event)
 
+    def _get_layer_spatial_info(self, layer):
+        is_mc = isinstance(layer, list)
+        is_multiscale = layer[0].multiscale if is_mc else layer.multiscale
+
+        if is_mc and is_multiscale:
+            layer_shape = layer[0].data[0].shape
+        elif is_mc and not is_multiscale:
+            layer_shape = layer[0].data.shape
+        elif not is_mc and is_multiscale:
+            layer_shape = layer.data[0].shape
+        elif not is_mc and not is_multiscale:
+            layer_shape = layer.data.shape
+
+        layer_spacing = layer[0].scale if is_mc else layer.scale
+
+        if guess_rgb(layer_shape):
+            layer_shape_yx = np.asarray(layer_shape)[:2]
+        else:
+            layer_shape_yx = np.asarray(layer_shape)[1:]
+
+        return layer_shape_yx, layer_spacing
+
+    def _transform_layerlist(
+        self, layer_data: Union[List[Any], Any], transform: np.ndarray
+    ):
+        if isinstance(layer_data, list):
+            for layer in layer_data:
+                layer.affine = transform
+        else:
+            layer_data.affine = transform
+
     def _rotate_modality(self):
         current_mod = self.current_mod_in_prepro.text()
         if current_mod not in ["[no preprocessing data type]", "[none selected]"]:
-            associated_mods = self.image_to_attach[current_mod]
+            associated_mods = self.attachment_keys[current_mod]
 
             rot_angle = float(self.prepro_main_ctrl.rot_cc.text())
             flip = self.prepro_main_ctrl.flip.currentText()
 
-            layer = self.layer_data[current_mod]
-            if isinstance(layer.data, list):
-                layer_shape = layer.data[0].shape
-            else:
-                layer_shape = layer.data.shape
+            layer_shape_yx, layer_spacing = self._get_layer_spatial_info(
+                self.layer_data[current_mod]
+            )
 
-            layer_spacing = layer.scale
-
-            if guess_rgb(layer_shape):
-                layer_shape = np.asarray(layer_shape)[:2]
-            else:
-                layer_shape = np.asarray(layer_shape)[1:]
-
-            rot_transform = centered_transform(layer_shape, layer_spacing, rot_angle)
+            rot_transform = centered_transform(layer_shape_yx, layer_spacing, rot_angle)
 
             if flip == "None":
                 transform = rot_transform
             else:
-                flip_transform = centered_flip(layer_shape, layer_spacing, flip)
+                flip_transform = centered_flip(layer_shape_yx, layer_spacing, flip)
                 transform = flip_transform @ rot_transform
 
-            layer.affine = transform
+            self._transform_layerlist(self.layer_data[current_mod], transform)
 
             for mod in associated_mods:
                 layer = self.layer_data[mod]
-                layer.affine = transform
+                self._transform_layerlist(layer, transform)
 
             self._update_preprocessing()
 
     def _flip_modality(self):
         current_mod = self.current_mod_in_prepro.text()
         if current_mod not in ["[no preprocessing data type]", "[none selected]"]:
-            associated_mods = self.image_to_attach[current_mod]
+            associated_mods = self.attachment_keys[current_mod]
             associated_mods.append(current_mod)
 
             direction = self.prepro_main_ctrl.flip.currentText()
             rot_angle = float(self.prepro_main_ctrl.rot_cc.text())
 
-            layer = self.layer_data[current_mod]
-            if isinstance(layer.data, list):
-                layer_shape = layer.data[0].shape
-
-            else:
-                layer_shape = layer.data.shape
-
-            layer_spacing = layer.scale
-
-            if guess_rgb(layer_shape):
-                layer_shape = np.asarray(layer_shape)[:2]
-            else:
-                layer_shape = np.asarray(layer_shape)[1:]
+            layer_shape_yx, layer_spacing = self._get_layer_spatial_info(
+                self.layer_data[current_mod]
+            )
 
             if direction != "None":
-                flip_transform = centered_flip(layer_shape, layer_spacing, direction)
+                flip_transform = centered_flip(layer_shape_yx, layer_spacing, direction)
             else:
                 flip_transform = np.eye(3)
 
@@ -802,20 +927,136 @@ class WsiReg2DMain(QWidget):
                 transform = flip_transform
             else:
                 rot_transform = centered_transform(
-                    layer_shape, layer_spacing, rot_angle
+                    layer_shape_yx, layer_spacing, rot_angle
                 )
                 transform = flip_transform @ rot_transform
 
-            layer.affine = transform
-
-            self._update_preprocessing()
+            self._transform_layerlist(self.layer_data[current_mod], transform)
 
             for mod in associated_mods:
                 layer = self.layer_data[mod]
-                layer.affine = transform
+                self._transform_layerlist(layer, transform)
+
+            self._update_preprocessing()
 
     def _update_reg_plot(self):
         self.graph_view.plot(self.reg_graph)
+
+    def _check_proj_info(self):
+        if len(self.reg_graph.modalities.keys()) == 0:
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText("Please add images to run registration graph")
+            msg.setInformativeText(
+                "Images must be added and paths between images defined to run"
+                " the registration graph."
+            )
+            msg.setWindowTitle("Please add images")
+            msg.setWindowModality(Qt.NonModal)
+            msg.exec_()
+            return False
+        elif len(self.reg_graph.reg_paths.keys()) == 0:
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText("Please define registration paths to run registration graph")
+            msg.setInformativeText(
+                "Without defined registration paths, there is no connection between images "
+                "in the registration graph, and no images to register to one another."
+            )
+            msg.setWindowTitle("Please define registration paths")
+            msg.setWindowModality(Qt.NonModal)
+            msg.exec_()
+            return False
+        elif self.output_dir_entry.text() == "":
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText("Please set an output directory to run a registration graph")
+            msg.setInformativeText(
+                "An output directory must be set in order for preprocessing images"
+                ", transformations, and transformed images and shapes to be"
+                "saved to disk after registration completes"
+            )
+            msg.setWindowTitle("Please set output directory")
+            msg.setWindowModality(Qt.NonModal)
+            msg.exec_()
+            return False
+        elif self.project_name_entry.text() == "":
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText("Please set a project name to run registration graph")
+            msg.setInformativeText(
+                "The project name is the identified for the graph. "
+                "If it is set to 'reg-proj', 'reg-proj' will prepend"
+                "all output images and files"
+            )
+            msg.setWindowTitle("Please set project name")
+            msg.setWindowModality(Qt.NonModal)
+            msg.exec_()
+            return False
+        else:
+            return True
+
+    def _get_proj_opts(self):
+        write_images = self.setup.proj_ctrl.write_images_check.isChecked()
+        to_original_size = self.setup.proj_ctrl.orig_size_check.isChecked()
+        transform_non_reg = self.setup.proj_ctrl.non_reg_image_check.isChecked()
+        write_merge_and_indiv_check = (
+            self.setup.proj_ctrl.write_merge_and_indiv_check.isChecked()
+        )
+
+        remove_merged = False if write_merge_and_indiv_check else True
+
+        return {
+            "write_images": write_images,
+            "to_original_size": to_original_size,
+            "transform_non_reg": transform_non_reg,
+            "remove_merged": remove_merged,
+        }
+
+    def run_registration(self):
+        if self._check_proj_info():
+            self.reg_graph.setup_project_output(
+                self.project_name_entry.text(), output_dir=self.output_dir_entry.text()
+            )
+            cache_images = self.setup.proj_ctrl.cache_images_check.isChecked()
+            self.reg_graph.cache_images = cache_images
+            reg_opts = self._get_proj_opts()
+
+            wsireg2d_main(self.reg_graph, **reg_opts)
+
+    def add_graph_to_queue(self):
+        if self._check_proj_info():
+            self.reg_graph.setup_project_output(
+                self.project_name_entry.text(), output_dir=self.output_dir_entry.text()
+            )
+            cache_images = self.setup.proj_ctrl.cache_images_check.isChecked()
+            self.reg_graph.cache_images = cache_images
+            reg_opts = self._get_proj_opts()
+            self.graph_queue.append((deepcopy(self.reg_graph), reg_opts))
+
+    def save_graph_config(self):
+        if self._check_proj_info():
+            project_name = self.project_name_entry.text()
+            output_dir = self.output_dir_entry.text()
+
+            output_file_name_suggestion = str(
+                Path(output_dir) / f"{project_name}-wsireg-config.yaml"
+            )
+
+            self.reg_graph.setup_project_output(project_name, output_dir=output_dir)
+            cache_images = self.setup.proj_ctrl.cache_images_check.isChecked()
+            self.reg_graph.cache_images = cache_images
+            # reg_opts = self._get_proj_opts()
+
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save wsireg graph config",
+                output_file_name_suggestion,
+                "YAML config (*.yaml)",
+            )
+
+            if filename:
+                self.reg_graph.save_config(output_file_path=filename, registered=False)
 
 
 @napari_hook_implementation
