@@ -1,3 +1,6 @@
+from typing import Union, Optional
+from enum import Enum
+from pathlib import Path
 from qtpy.QtGui import QColor, QFont
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -8,6 +11,49 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from napari_wsireg.gui.utils.colors import ATTACHMENTS_COL, IMAGES_COL, SHAPES_COL
+
+
+class ModType(str, Enum):
+    """Set the layer type for wsireg
+    * "image": Registration image
+    * "attachment": Image attached to registration image
+    * "shape": shape set attached to registration image
+    * "merge": modalities written to a single file at write time
+    * "mask": mask attached to an image
+    """
+
+    IMAGE = "image"
+    ATTACHMENT_IMAGE = "attachment"
+    SHAPE = "shape"
+    MERGE = "merge"
+    MASK = "mask"
+
+
+class QModalityListItem(QListWidgetItem):
+    def __init__(
+        self,
+        mod_tag: str,
+        mod_path: Union[str, Path],
+        mod_spacing: float,
+        mod_type: str,
+        attachment_modality: Optional[str] = None,
+    ):
+        super(QModalityListItem, self).__init__()
+        self.mod_tag = mod_tag
+        self.mod_path = mod_path
+        self.mod_spacing = mod_spacing
+        self.mod_type = ModType[mod_type]
+        self.attachment_modality = attachment_modality
+
+        if self.mod_type == ModType.IMAGE:
+            self.setForeground(QColor(IMAGES_COL))
+        elif self.mod_type == ModType.ATTACHMENT_IMAGE:
+            self.setForeground(QColor(ATTACHMENTS_COL))
+        elif self.mod_type == ModType.SHAPE:
+            self.setForeground(QColor(SHAPES_COL))
+        else:
+            pass
 
 
 class ModalityControl(QWidget):
@@ -56,7 +102,16 @@ class ModalityControl(QWidget):
         widg_layout.addStretch()
 
 
-def create_modality_item(item_name: str, item_color: str) -> QListWidgetItem:
-    item = QListWidgetItem(item_name)
-    item.setForeground(QColor(item_color))
+def create_modality_item(
+    mod_tag: str,
+    mod_path: Union[str, Path],
+    mod_spacing: float,
+    mod_type: str,
+    display_name: str,
+    attachment_modality: Optional[str] = None,
+) -> QListWidgetItem:
+    item = QModalityListItem(
+        mod_tag, mod_path, mod_spacing, mod_type, attachment_modality
+    )
+    item.setText(display_name)
     return item
