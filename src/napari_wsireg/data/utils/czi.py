@@ -1,6 +1,6 @@
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 
 import dask.array as da
 import numpy as np
@@ -8,7 +8,7 @@ import zarr
 from czifile import CziFile
 from tifffile import create_output
 
-from napari_wsireg.data.utils.image import compute_sub_res
+from napari_wsireg.data.utils.image import compute_sub_res, guess_rgb
 
 
 class CziRegImageReader(CziFile):
@@ -152,3 +152,64 @@ class CziRegImageReader(CziFile):
             dask_pyr.append(da.squeeze(da.from_zarr(zres, component="0")))
 
         return dask_pyr
+
+
+def get_level_blocks(czi: CziFile) -> dict:
+    level_blocks = dict()
+    for idx, sb in enumerate(czi.subblocks()):
+        if sb.pyramid_type != 0:
+            level = sb.shape[3] // sb.stored_shape[3]
+        else:
+            level = 0
+
+        try:
+            level_blocks[level]
+        except KeyError:
+            level_blocks[level] = dict()
+            level_blocks[level] = [(idx, sb)]
+            continue
+
+        level_blocks[level].append((idx, sb))
+
+    return level_blocks
+
+
+def get_czi_thumbnail(
+    czi: CziFile, pixel_spacing: Union[Tuple[int, int], Tuple[float, float]]
+) -> Optional[Tuple[np.ndarray, Tuple[float, float]]]:
+    ch_idx = czi.axes.index("C")
+    l_blocks = get_level_blocks(czi)
+    lowest_im = np.max(list(l_blocks.keys()))
+    calc_thumbnail_spacing = np.asarray(pixel_spacing) * lowest_im
+    thumbnail_spacing = (
+        float(calc_thumbnail_spacing[0]),
+        float(calc_thumbnail_spacing[1]),
+    )
+
+    block_indices = [b[0] for b in l_blocks[lowest_im]]
+    if guess_rgb(czi.shape) and len(block_indices) == 1:
+        data_idx = block_indices[0]
+        image_data = czi.subblock_directory[data_idx].data_segment()
+        thumbnail_array = np.squeeze(image_data.data(resize=False))
+        return thumbnail_array, thumbnail_spacing
+
+    elif len(block_indices) == czi.shape[czi.axes.index("C")]:
+        thumbnail_shape = list(
+            czi.subblock_directory[block_indices[0]].data_segment().stored_shape
+        )
+        thumbnail_shape[ch_idx] = czi.shape[ch_idx]
+
+        thumbnail_array = np.empty(thumbnail_shape, dtype=czi.dtype)
+        thumbnail_array = np.squeeze(thumbnail_array)
+        for b_index in block_indices:
+            image_data = czi.subblock_directory[b_index].data_segment()
+            data_ch_index = [
+                de.start for de in image_data.dimension_entries if de.dimension == "C"
+            ][0]
+            data = np.squeeze(image_data.data(resize=False))
+            thumbnail_array[data_ch_index, :, :] = data
+
+        return thumbnail_array, thumbnail_spacing
+
+    else:
+        return None, None

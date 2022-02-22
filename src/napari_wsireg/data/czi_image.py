@@ -6,7 +6,7 @@ import numpy as np
 import zarr
 from tifffile import xml2dict
 
-from napari_wsireg.data.utils.czi import CziRegImageReader
+from napari_wsireg.data.utils.czi import CziRegImageReader, get_czi_thumbnail
 from napari_wsireg.data.wsireg_image import WsiRegImage
 
 
@@ -82,8 +82,15 @@ class CziWsiRegImage(WsiRegImage):
         return self.czi.zarr_pyramidalize_czi(zarr.storage.TempStore())
 
     def _get_thumbnail(self) -> da.Array:
-        try:
-            return self._dask_pyr[-1]
-        except AttributeError:
-            self.prepare_image_data()
-            return self._get_thumbnail()
+
+        thumbnail, thumbnail_spacing = get_czi_thumbnail(self.czi, self._pixel_spacing)
+
+        if thumbnail_spacing:
+            self._thumbnail = da.from_array(thumbnail, chunks=thumbnail.shape)
+            self._thumbnail_spacing = thumbnail_spacing
+        else:
+            try:
+                return self._dask_pyr[-1]
+            except AttributeError:
+                self.prepare_image_data()
+                return self._get_thumbnail()
