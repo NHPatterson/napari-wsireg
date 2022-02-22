@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 
 import dask.array as da
 import numpy as np
@@ -27,7 +27,7 @@ class WsiRegImage(ABC):
 
     # scaling information
     _pixel_spacing: Union[Tuple[int, int], Tuple[float, float]]
-    _thumbnail_spacing: Union[Tuple[int, int], Tuple[float, float]]
+    _thumbnail_spacing: Optional[Union[Tuple[int, int], Tuple[float, float]]] = None
 
     @property
     def path(self) -> Union[str, Path]:
