@@ -1,6 +1,6 @@
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QFont
-from qtpy.QtWidgets import QGroupBox, QLabel, QVBoxLayout, QWidget, QTabWidget
+from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget, QTabWidget
 from superqt.collapsible import QCollapsible
 
 from napari_wsireg.gui.setup_sub.modality import ModalityControl
@@ -8,6 +8,7 @@ from napari_wsireg.gui.setup_sub.paths import RegistrationPathControl
 from napari_wsireg.gui.setup_sub.preprocessing import PreprocessingControl
 from napari_wsireg.gui.setup_sub.project import ProjectControl
 from napari_wsireg.gui.setup_sub.graph import RegGraphViewer
+from napari_wsireg.gui.queue import QueueControl
 
 from napari_wsireg.gui.utils.colors import ATTACHMENTS_COL, IMAGES_COL, SHAPES_COL
 
@@ -35,6 +36,7 @@ class SetupTab(QWidget):
         self.path_ctrl = RegistrationPathControl()
         self.graph_view = RegGraphViewer()
         self.proj_ctrl = ProjectControl()
+        self.queue_ctrl = QueueControl()
 
         self.layout().addWidget(mod_header)
         self.layout().setAlignment(mod_header, Qt.AlignTop)
@@ -53,11 +55,11 @@ class SetupTab(QWidget):
         self.layout().addWidget(reg_path_tabs)
         self.layout().setAlignment(reg_path_tabs, Qt.AlignTop)
 
-        project_gbox = QGroupBox()
-        project_gbox.setTitle("Save/queue/run registration graph")
-        project_gbox.setLayout(QVBoxLayout())
-        project_gbox.layout().addWidget(self.proj_ctrl)
-        self.layout().addWidget(project_gbox)
-        self.layout().setAlignment(project_gbox, Qt.AlignTop)
+        project_tabs = QTabWidget()
+        project_tabs.addTab(self.proj_ctrl, "Current graph")
+        project_tabs.addTab(self.queue_ctrl, "Reg. queue")
+
+        self.layout().addWidget(project_tabs)
+        self.layout().setAlignment(project_tabs, Qt.AlignTop)
         setup_layout.addStretch()
         setup_layout.setSpacing(10)
