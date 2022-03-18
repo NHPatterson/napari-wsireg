@@ -155,8 +155,3 @@ def test_wsireg_reg_path_switching(wsi_reg_fixture):
         wsi_reg_fixture.path_ctrl.target_select.currentText()
         == wsi_reg_fixture.image_mods[1]
     )
-
-
-def test_wsireg_reg_path(wsi_reg_fixture):
-    wsi_reg_fixture.path_ctrl.target_select.setCurrentText("")
-    wsi_reg_fixture.add_reg_path_to_graph()
