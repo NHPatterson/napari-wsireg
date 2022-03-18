@@ -1,13 +1,16 @@
+import shutil
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+from tempfile import TemporaryDirectory
 
 import napari
 import numpy as np
 from napari.qt.threading import thread_worker
 from napari.utils import progress
 from napari_plugin_engine import napari_hook_implementation
-from qtpy.QtCore import QEvent, Qt
+from napari.layers import Image, Shapes, Labels, Points
+from qtpy.QtCore import QEvent, Qt, QThreadPool
 from qtpy.QtWidgets import (
     QErrorMessage,
     QMessageBox,
@@ -31,13 +34,15 @@ from napari_wsireg.data import (
     TiffFileWsiRegImage,
     WsiRegImage,
 )
-from napari_wsireg.data.utils.image import guess_rgb
+from napari_wsireg.gui.utils.file import open_file_dialog
+from napari_wsireg.data.utils.image import guess_rgb, write_image_from_napari
+from napari_wsireg.data.utils.shapes import napari_shapes_to_qp_geojson
 from napari_wsireg.data.utils.transform import centered_flip, centered_transform
 from napari_wsireg.gui.dialogs.add_merge import AddMerge
 from napari_wsireg.gui.dialogs.add_modality import AddModality
 from napari_wsireg.gui.setup_gui import SetupTab
 from napari_wsireg.gui.setup_sub.modality import create_modality_item
-from napari_wsireg.gui.utils.file import open_file_dialog
+from napari_wsireg.gui.queue import reg_queue_item, generate_queue_tag
 
 
 class WsiReg2DMain(QWidget):
@@ -46,6 +51,12 @@ class WsiReg2DMain(QWidget):
 
         self.viewer = napari_viewer
 
+        self._temp_dir = TemporaryDirectory()
+        self._threadpool = QThreadPool()
+        self._threadpool.setMaxThreadCount(1)
+        self._pbar: Optional[progress] = None
+        self._n_graphs_registered: int = 0
+
         self.reg_graph: WsiReg2D = WsiReg2D(None, None)
         self.graph_queue: List[Tuple[WsiReg2D, Dict[str, bool]]] = []
 
@@ -53,6 +64,7 @@ class WsiReg2DMain(QWidget):
         self.attachment_mods: List[str] = []
         self.shape_mods: List[str] = []
         self.merge_mods: Dict[str, List[str]] = dict()
+        self.mask_mods: Dict[str, str] = dict()
 
         self.image_data: Dict[str, WsiRegImage] = dict()
         self.layer_data: Dict[str, Any] = dict()
@@ -67,6 +79,13 @@ class WsiReg2DMain(QWidget):
         self.add_mod_btn = self.setup.mod_ctrl.add_mod_btn
         self.add_ach_btn = self.setup.mod_ctrl.add_ach_btn
         self.add_shp_btn = self.setup.mod_ctrl.add_shp_btn
+        self.add_msk_btn = self.setup.mod_ctrl.add_msk_btn
+
+        self.add_mod_nap_btn = self.setup.mod_ctrl.add_mod_nap_btn
+        self.add_ach_nap_btn = self.setup.mod_ctrl.add_ach_nap_btn
+        self.add_shp_nap_btn = self.setup.mod_ctrl.add_shp_nap_btn
+        self.add_msk_nap_btn = self.setup.mod_ctrl.add_msk_nap_btn
+
         self.del_mod_btn = self.setup.mod_ctrl.del_mod_btn
         self.edit_mod_btn = self.setup.mod_ctrl.edt_mod_btn
 
@@ -98,6 +117,13 @@ class WsiReg2DMain(QWidget):
         self.output_dir_select = self.setup.proj_ctrl.output_dir_select
         self.output_dir_entry = self.setup.proj_ctrl.output_dir_entry
 
+        self.queue_list = self.setup.queue_ctrl.queue_list
+        self.up_queue_btn = self.setup.queue_ctrl.queue_move_up_btn
+        self.down_queue_btn = self.setup.queue_ctrl.queue_move_up_btn
+        self.del_queue_btn = self.setup.queue_ctrl.queue_delete_btn
+        self.progress_label = self.setup.queue_ctrl.current_running
+        self.run_queue_btn = self.setup.queue_ctrl.run_queue_btn
+
         scroll = QScrollArea()
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -111,9 +137,14 @@ class WsiReg2DMain(QWidget):
         self.add_mod_btn.clicked.connect(lambda: self.add_data("image"))
         self.add_ach_btn.clicked.connect(lambda: self.add_data("attachment"))
         self.add_shp_btn.clicked.connect(lambda: self.add_data("shape"))
+        self.add_msk_btn.clicked.connect(lambda: self.add_data("mask"))
+
+        self.add_mod_nap_btn.clicked.connect(lambda: self.add_nap_data("image"))
+        self.add_ach_nap_btn.clicked.connect(lambda: self.add_nap_data("attachment"))
+        self.add_shp_nap_btn.clicked.connect(lambda: self.add_nap_data("shape"))
+        self.add_msk_nap_btn.clicked.connect(lambda: self.add_nap_data("mask"))
 
         self.del_mod_btn.clicked.connect(self.delete_modality)
-
         self.edit_mod_btn.clicked.connect(self._edit_data)
         self.mod_list.itemDoubleClicked.connect(self._edit_data)
         self.mod_list.clicked.connect(self._switch_preprocessing_modality)
@@ -165,7 +196,14 @@ class WsiReg2DMain(QWidget):
         # project management connections
         self.output_dir_select.clicked.connect(self.set_project_output_dir)
         self.write_config_btn.clicked.connect(self.save_graph_config)
-        self.run_reg_btn.clicked.connect(self.run_registration)
+        self.run_reg_btn.clicked.connect(self.run_registration_direct)
+        self.add_to_queue_btn.clicked.connect(self.add_current_graph_to_queue)
+
+        # queue managment
+        # self.up_queue_btn.clicked.connect(lambda: self.move_queue_item("up"))
+        # self.down_queue_btn.clicked.connect(lambda: self.move_queue_item("down"))
+        self.del_queue_btn.clicked.connect(self.delete_queue_items)
+        self.run_queue_btn.clicked.connect(self.run_registration_queue)
 
     def add_data(
         self,
@@ -204,10 +242,102 @@ class WsiReg2DMain(QWidget):
 
                 elif data_type == "attachment":
                     self._add_attachment_data(file_path, no_dialog)
-                else:
+                elif data_type == "shape":
                     self._add_shape_data(file_path, no_dialog)
+                else:
+                    self._add_mask_data(file_path, no_dialog)
 
                 self._update_reg_plot()
+
+    def _check_data_type(
+        self, data_type: str, layer: Union[Image, Shapes, Labels, Points]
+    ) -> bool:
+        if (
+            data_type in ["image", "attachment"]
+            and isinstance(layer, (Image, Labels)) is False
+        ):
+            emsg = QErrorMessage(self)
+            emsg.showMessage(
+                "Current selected <i>napari</i> layer can't be added as an image or attachment"
+                " image because it is not an image layer, but a"
+                f" {str(type(layer)).split('.')[-1].replace('>','')} type"
+            )
+            return False
+        if data_type in ["shape"] and isinstance(layer, (Shapes, Points)) is False:
+            emsg = QErrorMessage(self)
+            emsg.showMessage(
+                "Current selected <i>napari</i> layer can't be added as an attachment shape "
+                " because it is not a Shape or Point layer, but a"
+                f" {str(type(layer)).split('.')[-1].replace('>','')} type"
+            )
+            return False
+        if data_type in ["mask"] and isinstance(layer, Shapes) is False:
+            emsg = QErrorMessage(self)
+            emsg.showMessage(
+                "Current selected <i>napari</i> layer can't be added as a mask "
+                " because it is not a Shape"
+                f" {str(type(layer)).split('.')[-1].replace('>','')} type. "
+                "Right now, only shape layer polygons and rectangles can be added as"
+                " masks from napari layers."
+            )
+            return False
+        return True
+
+    def add_nap_data(
+        self,
+        data_type: str,
+    ) -> None:
+        """
+        Collect image modality path
+        """
+
+        curr_selection = self.viewer.layers.selection
+        if len(curr_selection) > 1:
+            emsg = QErrorMessage(self)
+            emsg.showMessage("Only one layer from napari may be added at a time")
+            return
+        elif len(curr_selection) == 0:
+            return
+
+        selection = next(iter(curr_selection))
+
+        addable_layer = self._check_data_type(data_type, selection)
+        source_path = (
+            selection.source.path if selection.source.path else "in-memory layer"
+        )
+
+        if addable_layer:
+            if data_type in ["image"] and isinstance(selection, (Image, Labels)):
+                self._add_image_data(
+                    source_path,
+                    no_dialog=False,
+                    from_file=False,
+                    selected_layer=selection,
+                )
+            if data_type in ["attachment"] and isinstance(selection, (Image, Labels)):
+                self._add_attachment_data(
+                    source_path,
+                    no_dialog=False,
+                    from_file=False,
+                    selected_layer=selection,
+                )
+            if data_type in ["shape"] and isinstance(selection, (Shapes, Points)):
+                self._add_shape_data(
+                    source_path,
+                    no_dialog=False,
+                    from_file=False,
+                    selected_layer=selection,
+                )
+
+            if data_type in ["mask"] and isinstance(selection, Shapes):
+                self._add_mask_data(
+                    source_path,
+                    no_dialog=False,
+                    from_file=False,
+                    selected_layer=selection,
+                )
+
+            self._update_reg_plot()
 
     def _generate_random_name(self) -> str:
         import random
@@ -236,10 +366,22 @@ class WsiReg2DMain(QWidget):
 
             return None
 
-    def _add_image_data(self, file_path: Union[str, Path], no_dialog: bool = False):
-        image_data = self._get_image_data(file_path)
+    def _add_image_data(
+        self,
+        file_path: Union[str, Path],
+        no_dialog: bool = False,
+        from_file: bool = True,
+        selected_layer: Optional[Union[Image, Labels]] = None,
+    ):
+        if from_file:
+            image_data = self._get_image_data(file_path)
+            if image_data:
+                image_data_loaded = True
+        else:
+            image_data = None
+            image_data_loaded = True
 
-        if image_data:
+        if image_data_loaded:
             added_mod = AddModality(file_path, parent=self, image_data=image_data)
             if not no_dialog:
                 added_mod.setWindowTitle("Enter registration image information...")
@@ -260,21 +402,38 @@ class WsiReg2DMain(QWidget):
                 )
                 self.mod_list.addItem(mod_item)
                 preprocessing = added_mod.prepro_cntrl._export_data()
-                self.reg_graph.add_modality(
-                    mod_tag, file_path, mod_spacing, preprocessing=preprocessing
-                )
+
                 self.image_mods.append(mod_tag)
 
                 self.path_ctrl.source_select.addItem(mod_tag)
                 self.image_data.update({mod_tag: image_data})
                 self.image_spacings.update({mod_tag: mod_spacing})
-
-                self._run_add_image(
-                    mod_tag,
-                    image_data,
-                    use_thumbnail=added_mod.use_thumbnail.isChecked(),
-                )
                 self.attachment_keys.update({mod_tag: []})
+
+                if from_file:
+                    self._run_add_image(
+                        mod_tag,
+                        image_data,
+                        use_thumbnail=added_mod.use_thumbnail.isChecked(),
+                    )
+                    self.reg_graph.add_modality(
+                        mod_tag, file_path, mod_spacing, preprocessing=preprocessing
+                    )
+                else:
+                    selected_layer.name = mod_tag
+                    selected_layer.scale = [float(mod_spacing), float(mod_spacing)]
+                    self.layer_data.update({mod_tag: selected_layer})
+                    if file_path != "in-memory layer":
+                        in_data = file_path
+                    elif selected_layer.multiscale:
+                        in_data = selected_layer.data[0]
+                    else:
+                        in_data = selected_layer.data
+
+                    self.reg_graph.add_modality(
+                        mod_tag, in_data, mod_spacing, preprocessing=preprocessing
+                    )
+
                 self._update_path_possibilties()
 
     def _run_add_image(
@@ -283,8 +442,8 @@ class WsiReg2DMain(QWidget):
         image_data: Union[TiffFileWsiRegImage, CziWsiRegImage],
         use_thumbnail: bool = False,
     ):
-        pbr = progress(total=0)
-        pbr.set_description(f"reading {mod_tag} image")
+        self._pbar = progress(total=0)
+        self._pbar.set_description(f"reading {mod_tag} image")
 
         micro_reader_worker = self._prepare_image_data(
             mod_tag, image_data, use_thumbnail=use_thumbnail
@@ -292,9 +451,9 @@ class WsiReg2DMain(QWidget):
         micro_reader_worker.start()
         micro_reader_worker.returned.connect(self._add_image_to_viewer)
         micro_reader_worker.finished.connect(
-            lambda: pbr.set_description(f"finished reading {mod_tag} image")
+            lambda: self._pbar.set_description(f"finished reading {mod_tag} image")
         )
-        micro_reader_worker.finished.connect(pbr.close)
+        micro_reader_worker.finished.connect(self._pbar.close)
 
     @thread_worker
     def _prepare_image_data(
@@ -347,11 +506,28 @@ class WsiReg2DMain(QWidget):
             )
 
     def _add_attachment_data(
-        self, file_path: Union[str, Path], no_dialog: bool = False
+        self,
+        file_path: Union[str, Path],
+        no_dialog: bool = False,
+        from_file: bool = True,
+        selected_layer: Optional[Union[Image, Labels]] = None,
     ):
-        image_data = self._get_image_data(file_path)
+        if len(self.attachment_keys.keys()) == 0:
+            emsg = QErrorMessage(self)
+            emsg.showMessage(
+                "No modalities have been defined for attachment\n"
+                "Please add images for registration prior to attaching"
+            )
+            return
+        if from_file:
+            image_data = self._get_image_data(file_path)
+            if image_data:
+                image_data_loaded = True
+        else:
+            image_data = None
+            image_data_loaded = True
 
-        if image_data:
+        if image_data_loaded:
             try:
                 added_mod = AddModality(
                     file_path,
@@ -387,20 +563,79 @@ class WsiReg2DMain(QWidget):
                 attachment_modality=attachment_modality,
             )
             self.mod_list.addItem(mod_item)
-            self.reg_graph.add_attachment_images(
-                attachment_modality, mod_tag, file_path, mod_spacing
-            )
             self.image_data.update({mod_tag: image_data})
             self.image_spacings.update({mod_tag: mod_spacing})
-            self._run_add_image(
-                mod_tag, image_data, use_thumbnail=added_mod.use_thumbnail.isChecked()
-            )
+            if from_file:
+                self._run_add_image(
+                    mod_tag,
+                    image_data,
+                    use_thumbnail=added_mod.use_thumbnail.isChecked(),
+                )
+                self.reg_graph.add_attachment_images(
+                    attachment_modality, mod_tag, file_path, mod_spacing
+                )
+            else:
+                selected_layer.name = mod_tag
+                self.layer_data.update({mod_tag: selected_layer})
+                if file_path != "in-memory layer":
+                    in_data = file_path
+                elif selected_layer.multiscale:
+                    in_data = selected_layer.data[0]
+                else:
+                    in_data = selected_layer.data
+
+                self.reg_graph.add_attachment_images(
+                    attachment_modality, mod_tag, in_data, mod_spacing
+                )
+
+            self._update_preprocessing()
             self.attachment_mods.append(mod_tag)
             self.attachment_keys[attachment_modality].append(mod_tag)
 
-    def _add_shape_data(self, file_path: Union[str, Path], no_dialog: bool = False):
+    def _determine_attachment_level(
+        self,
+        layer: Union[Image, Labels, Shapes, Points],
+        attachment_modality: str,
+        is_shapes: bool = False,
+    ):
+        """Infer the spacing of an attachment layer based on the data
+        Added layers aren't necessarily attached so the they may not be in their proper
+        pixel spacing"""
+        current_layer_spacing = layer.scale
+        # attached_scale = self.layer_data[attachment_modality].scale
+        attached_base_scale = self.image_data[attachment_modality].pixel_spacing
 
-        shape_data = RegShapes(file_path)
+        # if np.array_equal(attached_scale, attached_base_scale):
+        #     current_spacing = attached_base_scale[0]
+        # else:
+        #     current_spacing = self.image_data[attachment_modality].thumbnail_spacing[0]
+
+        if is_shapes:
+            new_shapes = []
+            for shape in layer.data:
+                new_shapes.append(
+                    shape / (attached_base_scale[0] / current_layer_spacing[0])
+                )
+            layer.data = new_shapes
+        layer.scale = attached_base_scale
+
+    def _add_shape_data(
+        self,
+        file_path: Union[str, Path],
+        no_dialog: bool = False,
+        from_file: bool = True,
+        selected_layer: Optional[Union[Image, Labels]] = None,
+    ):
+        if len(self.attachment_keys.keys()) == 0:
+            emsg = QErrorMessage(self)
+            emsg.showMessage(
+                "No modalities have been defined for attachment\n"
+                "Please add images for registration prior to attaching"
+            )
+            return
+
+        if from_file:
+            shape_data = RegShapes(file_path)
 
         added_mod = AddModality(
             file_path,
@@ -433,26 +668,111 @@ class WsiReg2DMain(QWidget):
                 attachment_modality=attachment_modality,
             )
             self.mod_list.addItem(mod_item)
-            self.reg_graph.add_attachment_shapes(
-                attachment_modality, mod_tag, file_path
-            )
             self.shape_mods.append(mod_tag)
             self.attachment_keys[attachment_modality].append(mod_tag)
-            self._add_shapes_to_viewer(mod_tag, shape_data, mod_spacing)
+            if from_file:
+                self._add_shapes_to_viewer(mod_tag, shape_data, mod_spacing)
+                self.reg_graph.add_attachment_shapes(
+                    attachment_modality, mod_tag, file_path
+                )
+            else:
+                self._determine_attachment_level(
+                    selected_layer, attachment_modality, is_shapes=True
+                )
+                selected_layer.name = mod_tag
+                self.layer_data.update({mod_tag: selected_layer})
+                self.reg_graph.add_attachment_shapes(
+                    attachment_modality, mod_tag, file_path
+                )
+
+    def _add_mask_data(
+        self,
+        file_path: Union[str, Path],
+        no_dialog: bool = False,
+        from_file: bool = True,
+        selected_layer: Optional[Union[Image, Labels]] = None,
+    ):
+        if len(self.attachment_keys.keys()) == 0:
+            emsg = QErrorMessage(self)
+            emsg.showMessage(
+                "No modalities have been defined for attachment\n"
+                "Please add images for registration prior to attaching"
+            )
+            return
+
+        is_shapes = False
+
+        if from_file:
+            if Path(file_path).suffix.lower() in [".geojson", ".json"]:
+                mask_data = RegShapes(file_path)
+                is_shapes = True
+            else:
+                mask_data = self._get_image_data(file_path)
+
+        added_mod = AddModality(
+            file_path,
+            parent=self,
+            attachment=True,
+            attachment_tags=self.image_mods,
+            image_spacings=self.image_spacings,
+        )
+        if not no_dialog:
+            added_mod.setWindowTitle("Enter image mask info...")
+            added_mod.setWindowModality(Qt.ApplicationModal)
+            added_mod.exec_()
+        else:
+            rstr = self._generate_random_name()
+            added_mod.tag.setText(rstr)
+            added_mod.completed = True
+
+        if added_mod.completed:
+            mod_tag = str(added_mod.tag.text())
+            mod_spacing = float(added_mod.spacing.text())
+            mod_path = Path(file_path).name
+            attachment_modality = added_mod.attachment_combo.currentText()
+            display_name = f"{mod_tag} : {mod_path} : {mod_spacing} (μm)"
+            mod_item = create_modality_item(
+                mod_tag,
+                mod_path,
+                mod_spacing,
+                "MASK",
+                display_name,
+                attachment_modality=attachment_modality,
+            )
+            self.mod_list.addItem(mod_item)
+            self.attachment_keys[attachment_modality].append(mod_tag)
+            if from_file:
+                if is_shapes:
+                    self._add_shapes_to_viewer(mod_tag, mask_data, mod_spacing)
+                else:
+                    self._run_add_image(
+                        mod_tag,
+                        mask_data,
+                        use_thumbnail=added_mod.use_thumbnail.isChecked(),
+                    )
+                self.reg_graph.modalities[attachment_modality]["mask"] = file_path
+            else:
+                self._determine_attachment_level(
+                    selected_layer, attachment_modality, is_shapes=True
+                )
+                selected_layer.name = mod_tag
+                self.layer_data.update({mod_tag: selected_layer})
+                temp_dir = self._temp_dir.name
+                output_fp = (
+                    Path(temp_dir) / f"{attachment_modality}-mask-tempdir.geojson"
+                )
+                output_fp = napari_shapes_to_qp_geojson(
+                    self.layer_data[mod_tag], str(output_fp)
+                )
+                self.reg_graph.modalities[attachment_modality]["mask"] = output_fp
+        self.mask_mods.update({mod_tag: attachment_modality})
 
     def _add_shapes_to_viewer(
         self, mod_tag: str, shape_data: RegShapes, mod_spacing: float
     ):
-        shape_arrays = [s["array"][:, [1, 0]] for s in shape_data.shape_data]
-
-        shape_props = {"name": shape_data.shape_names}
-
-        shape_text = {
-            "text": "{name}",
-            "color": "white",
-            "anchor": "center",
-            "size": 12,
-        }
+        shape_arrays, shape_props, shape_text = self._get_shape_data_from_reg_shapes(
+            shape_data
+        )
 
         self.layer_data.update(
             {
@@ -462,9 +782,23 @@ class WsiReg2DMain(QWidget):
                     properties=shape_props,
                     text=shape_text,
                     shape_type="polygon",
+                    name=mod_tag,
                 )
             }
         )
+
+    def _get_shape_data_from_reg_shapes(
+        self, shape_data: RegShapes
+    ) -> Tuple[List[np.ndarray], Dict[str, List[str]], Dict[str, Union[str, int]]]:
+        shape_arrays = [s["array"][:, [1, 0]] for s in shape_data.shape_data]
+        shape_props = {"name": shape_data.shape_names}
+        shape_text = {
+            "text": "{name}",
+            "color": "white",
+            "anchor": "center",
+            "size": 12,
+        }
+        return shape_arrays, shape_props, shape_text
 
     def _get_current_mod_item(self):
         mod_item = self.mod_list.currentItem()
@@ -529,6 +863,8 @@ class WsiReg2DMain(QWidget):
             self.current_mod_in_prepro.setText("[no preprocessing data type]")
 
         self.path_ctrl.source_select.setCurrentText(mod_tag)
+        self._rotate_modality()
+        self._flip_modality()
 
     def _reset_reg_model(self):
         self.current_reg_models.setText("[None added]")
@@ -625,7 +961,7 @@ class WsiReg2DMain(QWidget):
                     rm_idx = current_items.index(mod_tag)
                     self.path_ctrl.source_select.removeItem(rm_idx)
                     self._update_path_possibilties()
-                    associated_mods = self.attachment_keys[mod_tag]
+                    associated_mods = deepcopy(self.attachment_keys[mod_tag])
                     all_associated_mods.extend(associated_mods)
 
                 if mod_type.name == "ATTACHMENT_IMAGE":
@@ -638,6 +974,12 @@ class WsiReg2DMain(QWidget):
 
                 ld = self.layer_data.pop(mod_tag)
                 self.viewer.layers.pop(self.viewer.layers.index(ld.name))
+
+            elif mod_type.name == "MASK":
+                ld = self.layer_data.pop(mod_tag)
+                self.viewer.layers.pop(self.viewer.layers.index(ld.name))
+                attachment_modality = self.mask_mods[mod_tag]
+                self.reg_graph.modalities[attachment_modality]["mask"] = None
 
             elif mod_type.name == "MERGE":
                 self.merge_mods.pop(mod_tag)
@@ -669,23 +1011,35 @@ class WsiReg2DMain(QWidget):
             [self.merge_mods.pop(rm) for rm in to_rm]
 
             for assoc_mod in all_associated_mods:
-                self.reg_graph.remove_modality(assoc_mod)
+                if assoc_mod not in list(self.mask_mods.keys()):
+                    self.reg_graph.remove_modality(assoc_mod)
                 all_mod_tags = [
                     self.mod_list.item(ii).mod_tag
                     for ii in range(self.mod_list.count())
                 ]
-
-                rm_idx = all_mod_tags.index(assoc_mod)
+                try:
+                    rm_idx = all_mod_tags.index(assoc_mod)
+                except ValueError:
+                    continue
                 self.mod_list.takeItem(rm_idx)
 
                 ld = self.layer_data.pop(assoc_mod)
                 self.viewer.layers.pop(self.viewer.layers.index(ld.name))
+
+                if assoc_mod in self.attachment_mods:
+                    self.attachment_mods.pop(self.attachment_mods.index(assoc_mod))
+                elif assoc_mod in self.mask_mods:
+                    self.mask_mods.pop(assoc_mod)
+                elif assoc_mod in self.shape_mods:
+                    self.shape_mods.pop(self.shape_mods.index(assoc_mod))
+
+            if len(associated_mods) > 0:
                 msg = QMessageBox(self)
                 msg.setIcon(QMessageBox.Warning)
                 msg.setText("Associated modality has been removed")
                 msg.setInformativeText(
-                    f"<b>{mod_tag}</b> had assoicated data with tag <b>{assoc_mod}</b> and"
-                    f" <b>{assoc_mod}</b> was removed\n"
+                    f"<b>{mod_tag}</b> had assoicated data with tag(s) <b>{', '.join(associated_mods)}</b> and"
+                    f" <b>{', '.join(associated_mods)}</b> was(were) removed\n"
                     f"<i>N.B.</i>: wsireg attachment modalities cannot be specified unattached"
                 )
                 msg.setWindowModality(Qt.NonModal)
@@ -693,11 +1047,6 @@ class WsiReg2DMain(QWidget):
                     f"{mod_tag} - associated data removal warning: {assoc_mod}"
                 )
                 msg.exec_()
-
-                if assoc_mod in self.attachment_mods:
-                    self.attachment_mods.pop(self.attachment_mods.index(assoc_mod))
-                elif assoc_mod in self.shape_mods:
-                    self.shape_mods.pop(self.shape_mods.index(assoc_mod))
 
             self._update_reg_plot()
 
@@ -879,8 +1228,9 @@ class WsiReg2DMain(QWidget):
 
     def _rotate_modality(self):
         current_mod = self.current_mod_in_prepro.text()
+
         if current_mod not in ["[no preprocessing data type]", "[none selected]"]:
-            associated_mods = self.attachment_keys[current_mod]
+            associated_mods = deepcopy(self.attachment_keys[current_mod])
 
             rot_angle = float(self.prepro_main_ctrl.rot_cc.text())
             flip = self.prepro_main_ctrl.flip.currentText()
@@ -907,8 +1257,9 @@ class WsiReg2DMain(QWidget):
 
     def _flip_modality(self):
         current_mod = self.current_mod_in_prepro.text()
+
         if current_mod not in ["[no preprocessing data type]", "[none selected]"]:
-            associated_mods = self.attachment_keys[current_mod]
+            associated_mods = deepcopy(self.attachment_keys[current_mod])
             associated_mods.append(current_mod)
 
             direction = self.prepro_main_ctrl.flip.currentText()
@@ -1013,26 +1364,211 @@ class WsiReg2DMain(QWidget):
             "remove_merged": remove_merged,
         }
 
-    def run_registration(self):
+    def _add_registered_data_from_executed_graph(self, output_data: List[str]) -> None:
+        for output in output_data:
+            name = Path(output).name
+            if Path(output).suffix == ".geojson":
+                shape_data = RegShapes(output)
+                (
+                    shape_arrays,
+                    shape_props,
+                    shape_text,
+                ) = self._get_shape_data_from_reg_shapes(shape_data)
+                # figure out mod spacing...
+                self.viewer.add_shapes(
+                    shape_arrays,
+                    properties=shape_props,
+                    text=shape_text,
+                    shape_type="polygon",
+                    name=name,
+                )
+            else:
+                image_data = TiffFileWsiRegImage(output)
+                image_data.prepare_image_data()
+                channel_names = [f"{name}-{c}" for c in image_data.channel_names]
+
+                self.viewer.add_image(
+                    image_data.dask_pyr,
+                    channel_axis=None if image_data.is_rgb else image_data.channel_axis,
+                    name=channel_names if not image_data.is_rgb else name,
+                    scale=image_data.pixel_spacing,
+                    rgb=image_data.is_rgb,
+                )
+
+    def _check_modalities_for_napari_layers(self) -> None:
+        for shape_name, shape_data in self.reg_graph.shape_sets.items():
+            if shape_data["shape_files"] == "in-memory layer":
+                output_fp = str(
+                    self.reg_graph.output_dir
+                    / f"{self.reg_graph.project_name}-{shape_name}-from-napari-layer.geojson"
+                )
+                output_shapes_fp = napari_shapes_to_qp_geojson(
+                    self.layer_data[shape_name], output_fp
+                )
+                shape_data["shape_files"] = output_shapes_fp
+
+        for image_name, image_data in self.reg_graph.modalities.items():
+            if image_data["image_filepath"] == "in-memory layer":
+                output_fp = str(
+                    self.reg_graph.output_dir
+                    / f"{self.reg_graph.project_name}-{image_name}-from-napari-layer.tiff"
+                )
+                output_shapes_fp = write_image_from_napari(
+                    self.layer_data[image_name].data, output_fp
+                )
+                image_data["image_filepath"] = output_shapes_fp
+            if isinstance(image_data["mask"], str):
+                if (
+                    Path(image_data["mask"]).suffix.lower() == ".geojson"
+                    and "-mask-tempdir.geojson" in image_data["mask"]
+                ):
+                    output_fp = str(
+                        self.reg_graph.output_dir
+                        / f"{self.reg_graph.project_name}-{image_name}-mask-from-napari-layer.geojson"
+                    )
+                    shutil.copy(image_data["mask"], output_fp)
+                    image_data["mask"] = output_fp
+
+    def run_registration_direct(self):
+        if self._threadpool.activeThreadCount() > 0:
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText("Graph added to queue")
+            msg.setInformativeText(
+                "In order to minimize total memory and compute consumption typical "
+                "of WSI registration, "
+                "only one graph at a time can be executed. "
+                "This graph as been added to the queue."
+            )
+            msg.setWindowTitle("Only 1 registration graph can be executed at a time")
+            msg.setWindowModality(Qt.NonModal)
+            msg.exec_()
+            self.add_current_graph_to_queue()
+            return
+
         if self._check_proj_info():
             self.reg_graph.setup_project_output(
                 self.project_name_entry.text(), output_dir=self.output_dir_entry.text()
             )
+            self._check_modalities_for_napari_layers()
             cache_images = self.setup.proj_ctrl.cache_images_check.isChecked()
             self.reg_graph.cache_images = cache_images
             reg_opts = self._get_proj_opts()
 
-            wsireg2d_main(self.reg_graph, **reg_opts)
+        self._pbar = progress(total=0)
+        self._pbar.set_description(f"Registering graph {self.reg_graph.project_name}")
+        graph_runner_worker = self._run_registration(self.reg_graph, reg_opts)
+        graph_runner_worker.returned.connect(
+            self._add_registered_data_from_executed_graph
+        )
+        graph_runner_worker.finished.connect(
+            lambda: self._pbar.set_description(
+                f"finished registered {self.reg_graph.project_name}"
+            )
+        )
+        graph_runner_worker.finished.connect(self._pbar.close)
+        self._threadpool.start(graph_runner_worker)
 
-    def add_graph_to_queue(self):
+    @thread_worker
+    def _run_registration(self, reg_graph: WsiReg2D, reg_opts: dict) -> List[str]:
+        output_data = wsireg2d_main(reg_graph, **reg_opts)
+        return output_data
+
+    def _add_graph_item_to_queue(self, reg_graph: WsiReg2D, reg_opts: dict) -> None:
+        queue_item = reg_queue_item(reg_graph, reg_opts)
+        self.queue_list.addItem(queue_item)
+
+    def _check_queue_for_identical_item(self, reg_graph: WsiReg2D) -> bool:
+        queue_tags = [
+            self.queue_list.item(r).queue_tag for r in range(self.queue_list.count())
+        ]
+        new_q_tag = generate_queue_tag(reg_graph)
+        if new_q_tag in queue_tags:
+            emsg = QErrorMessage(self)
+            emsg.showMessage("The modality added to queue is identical to another.")
+            return False
+        else:
+            return True
+
+    def delete_queue_items(self):
+        queue_items = self.queue_list.selectedItems()
+        for item in queue_items:
+            self.queue_list.takeItem(self.queue_list.row(item))
+
+    def add_current_graph_to_queue(self):
         if self._check_proj_info():
             self.reg_graph.setup_project_output(
                 self.project_name_entry.text(), output_dir=self.output_dir_entry.text()
             )
+            self._check_modalities_for_napari_layers()
             cache_images = self.setup.proj_ctrl.cache_images_check.isChecked()
             self.reg_graph.cache_images = cache_images
             reg_opts = self._get_proj_opts()
-            self.graph_queue.append((deepcopy(self.reg_graph), reg_opts))
+            if self._check_queue_for_identical_item(self.reg_graph):
+                self._add_graph_item_to_queue(
+                    deepcopy(self.reg_graph), deepcopy(reg_opts)
+                )
+
+    def _set_running_queue_label(self, running_data):
+        self.progress_label.setText(running_data)
+
+    def _update_n_graphs_registered(self):
+        self._n_graphs_registered += 1
+
+    def _check_close_pbar(self):
+        if self._n_graphs_registered == self._pbar.total:
+            self._pbar.close()
+
+    def _send_graph_to_execution(self, queue_item):
+        graph_runner_worker = self._run_registration(
+            queue_item.reg_graph, queue_item.reg_options
+        )
+        graph_runner_worker.started.connect(
+            lambda: self._set_running_queue_label(queue_item.reg_graph.project_name)
+        )
+        graph_runner_worker.started.connect(
+            lambda: self._pbar.set_description(
+                f"Registering graph {queue_item.reg_graph.project_name}"
+            )
+        )
+        graph_runner_worker.returned.connect(
+            self._add_registered_data_from_executed_graph
+        )
+
+        graph_runner_worker.finished.connect(queue_item._set_finished)
+        graph_runner_worker.finished.connect(
+            lambda: self._pbar.set_description(
+                f"finished registered {queue_item.reg_graph.project_name}"
+            )
+        )
+        graph_runner_worker.finished.connect(lambda: self._pbar.update(1))
+        graph_runner_worker.finished.connect(self._update_n_graphs_registered)
+        graph_runner_worker.finished.connect(self._check_close_pbar)
+        self._threadpool.start(graph_runner_worker)
+
+    def run_registration_queue(self):
+        if self._threadpool.activeThreadCount() > 0:
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText("A previous queue is in execution")
+            msg.setInformativeText(
+                "Please wait for the previous queue to finish before starting a execution."
+            )
+            msg.setWindowTitle("Queue already running")
+            msg.setWindowModality(Qt.NonModal)
+            msg.exec_()
+            return
+
+        to_send = []
+        for item_idx in range(self.queue_list.count()):
+            queue_item = self.queue_list.item(item_idx)
+            if not queue_item.finished:
+                to_send.append(queue_item)
+
+        self._pbar = progress(total=len(to_send))
+        for queue_item in to_send:
+            self._send_graph_to_execution(queue_item)
+        self._n_graphs_registered = 0
 
     def save_graph_config(self):
         if self._check_proj_info():
@@ -1057,6 +1593,9 @@ class WsiReg2DMain(QWidget):
 
             if filename:
                 self.reg_graph.save_config(output_file_path=filename, registered=False)
+
+    def closeEvent(self, _) -> None:
+        self._temp_dir.cleanup()
 
 
 @napari_hook_implementation

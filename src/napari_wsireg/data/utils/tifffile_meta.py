@@ -37,6 +37,12 @@ def tifftag_xy_pixel_sizes(
     x_res_um = (1 / (x_res[0] / x_res[1])) * res_to_um
     y_res_um = (1 / (y_res[0] / y_res[1])) * res_to_um
 
+    # correct for ITK assuming everything is spacing in mm
+    software = current_page.tags.get("Software")
+    if software and software.value == "InsightToolkit":
+        x_res_um *= 0.001
+        y_res_um *= 0.001
+
     return (x_res_um, y_res_um)
 
 

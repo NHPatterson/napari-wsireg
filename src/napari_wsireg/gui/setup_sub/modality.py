@@ -10,6 +10,7 @@ from qtpy.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget,
+    QLabel,
 )
 from napari_wsireg.gui.utils.colors import ATTACHMENTS_COL, IMAGES_COL, SHAPES_COL
 
@@ -59,47 +60,93 @@ class QModalityListItem(QListWidgetItem):
 class ModalityControl(QWidget):
     def __init__(self, parent=None):
         super().__init__()
-
+        top_level_layout = QVBoxLayout()
         widg_layout = QHBoxLayout()
         widg_layout.addStretch()
-        widg_layout.setSpacing(10)
-        self.setMaximumHeight(200)
+        widg_layout.setSpacing(5)
+        top_level_layout.setSpacing(5)
 
-        self.setLayout(widg_layout)
+        self.setLayout(top_level_layout)
+        self.setMaximumHeight(250)
 
         self.mod_list = QListWidget()
         self.mod_list.setMaximumHeight(120)
         self.mod_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
         btn_font = QFont("Arial", 10)
+        header_font = QFont("Arial", 12)
+        from_file_label = QLabel("<b>From file</b>")
         self.add_mod_btn = QPushButton("+  Image")
         self.add_ach_btn = QPushButton("+  Attachment")
         self.add_shp_btn = QPushButton("+  Shape")
+        self.add_msk_btn = QPushButton("+  Mask")
+
         self.del_mod_btn = QPushButton("-  Remove")
         self.edt_mod_btn = QPushButton("   Edit")
 
+        from_file_label.setStyleSheet("text-align:left;")
         self.add_mod_btn.setStyleSheet("text-align:left;")
         self.add_ach_btn.setStyleSheet("text-align:left;")
         self.add_shp_btn.setStyleSheet("text-align:left;")
-        self.del_mod_btn.setStyleSheet("text-align:left;")
-        self.edt_mod_btn.setStyleSheet("text-align:left;")
+        self.add_msk_btn.setStyleSheet("text-align:left;")
 
+        # self.del_mod_btn.setStyleSheet("text-align:left;")
+        # self.edt_mod_btn.setStyleSheet("text-align:left;")
+
+        from_file_label.setFont(header_font)
+        self.add_mod_btn.setFont(btn_font)
         self.add_ach_btn.setFont(btn_font)
         self.add_shp_btn.setFont(btn_font)
+        self.add_msk_btn.setFont(btn_font)
+
         self.del_mod_btn.setFont(btn_font)
-        self.add_mod_btn.setFont(btn_font)
         self.edt_mod_btn.setFont(btn_font)
 
         btn_layout = QVBoxLayout()
-
-        self.layout().addWidget(self.mod_list)
+        btn_layout.addWidget(from_file_label)
         btn_layout.addWidget(self.add_mod_btn)
         btn_layout.addWidget(self.add_ach_btn)
         btn_layout.addWidget(self.add_shp_btn)
-        btn_layout.addWidget(self.del_mod_btn)
-        btn_layout.addWidget(self.edt_mod_btn)
-        self.layout().addLayout(btn_layout)
+        btn_layout.addWidget(self.add_msk_btn)
+        # btn_layout.addWidget(self.del_mod_btn)
+        # btn_layout.addWidget(self.edt_mod_btn)
+        widg_layout.addLayout(btn_layout)
+        widg_layout.addWidget(self.mod_list)
+
+        nap_header = QLabel()
+        nap_header.setText("<b>From <i>napari</i></b>")
+        nap_header.setFont(header_font)
+        from_nap_layout = QVBoxLayout()
+        self.add_mod_nap_btn = QPushButton("+  Image")
+        self.add_ach_nap_btn = QPushButton("+  Attachment")
+        self.add_shp_nap_btn = QPushButton("+  Shape")
+        self.add_msk_nap_btn = QPushButton("+  Mask")
+        self.add_mod_nap_btn.setFont(btn_font)
+        self.add_ach_nap_btn.setFont(btn_font)
+        self.add_shp_nap_btn.setFont(btn_font)
+        self.add_msk_nap_btn.setFont(btn_font)
+        self.add_mod_nap_btn.setStyleSheet("text-align:left;")
+        self.add_ach_nap_btn.setStyleSheet("text-align:left;")
+        self.add_shp_nap_btn.setStyleSheet("text-align:left;")
+        self.add_msk_nap_btn.setStyleSheet("text-align:left;")
+
+        from_nap_layout.addWidget(nap_header)
+        from_nap_layout.addWidget(self.add_mod_nap_btn)
+        from_nap_layout.addWidget(self.add_ach_nap_btn)
+        from_nap_layout.addWidget(self.add_shp_nap_btn)
+        from_nap_layout.addWidget(self.add_msk_nap_btn)
+
+        widg_layout.addLayout(from_nap_layout)
+        edit_rm_layout = QHBoxLayout()
+        self.edt_mod_btn.setMaximumWidth(100)
+        self.del_mod_btn.setMaximumWidth(100)
+        # edit_rm_layout.addSpacerItem()
+        edit_rm_layout.addWidget(self.edt_mod_btn)
+        edit_rm_layout.addWidget(self.del_mod_btn)
+        self.layout().addLayout(widg_layout)
+        self.layout().addLayout(edit_rm_layout)
         widg_layout.addStretch()
+        top_level_layout.addStretch()
 
 
 def create_modality_item(

@@ -4,7 +4,7 @@ from typing import List, Tuple, Union
 import numpy as np
 import zarr
 from dask import array as da
-from tifffile import TiffFile, imread, xml2dict
+from tifffile import TiffFile, imread, xml2dict, imwrite
 
 
 def tifffile_to_dask(
@@ -136,3 +136,10 @@ def compute_sub_res(
     resampled_zarray_subres = resampled_zarray_subres.rechunk(tiling)
 
     return resampled_zarray_subres
+
+
+def write_image_from_napari(
+    image_data: Union[np.ndarray, da.Array, zarr.Array], output_fp: str
+) -> str:
+    imwrite(output_fp, image_data, compression="deflate", tile=(2048, 2048))
+    return output_fp
