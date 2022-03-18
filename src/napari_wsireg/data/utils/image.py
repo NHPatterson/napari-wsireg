@@ -12,10 +12,16 @@ def tifffile_to_dask(
 ) -> Union[da.Array, List[da.Array]]:
     imdata = zarr.open(imread(im_fp, aszarr=True, series=largest_series))
     if isinstance(imdata, zarr.hierarchy.Group):
-        imdata = [da.from_zarr(imdata[z]) for z in imdata.array_keys()]
+        dask_imdata = []
+        for i in range(128):
+            try:
+                sub_im = da.from_zarr(imdata[i])
+                dask_imdata.append(sub_im)
+            except IndexError:
+                continue
     else:
-        imdata = da.from_zarr(imdata)
-    return imdata
+        dask_imdata = da.from_zarr(imdata)
+    return dask_imdata
 
 
 def guess_rgb(shape: Tuple[int, ...]) -> bool:

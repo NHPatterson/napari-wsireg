@@ -973,7 +973,11 @@ class WsiReg2DMain(QWidget):
                     self._clear_attachment_keys(mod_tag)
 
                 ld = self.layer_data.pop(mod_tag)
-                self.viewer.layers.pop(self.viewer.layers.index(ld.name))
+                if isinstance(ld, list):
+                    for layer in ld:
+                        self.viewer.layers.pop(self.viewer.layers.index(layer.name))
+                else:
+                    self.viewer.layers.pop(self.viewer.layers.index(ld.name))
 
             elif mod_type.name == "MASK":
                 ld = self.layer_data.pop(mod_tag)
