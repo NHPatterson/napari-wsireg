@@ -18,6 +18,7 @@ class CziWsiRegImage(WsiRegImage):
         self._get_dim_info()
         self._get_pixel_scaling()
         self._get_channel_metadata()
+        self._get_thumbnail()
 
     def _get_pixel_scaling(self) -> None:
         czi_meta = xml2dict(self.czi.metadata())

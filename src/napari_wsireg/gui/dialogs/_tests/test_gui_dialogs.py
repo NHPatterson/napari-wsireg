@@ -10,6 +10,9 @@ from napari_wsireg.gui.dialogs.add_modality import AddModality
 
 HERE = Path(os.path.dirname(__file__))
 
+REASON = "private data"
+SKIP_PRIVATE = True
+
 
 @pytest.fixture
 def pref_image(qtbot):
@@ -86,18 +89,21 @@ def add_merge_modality(qtbot):
     yield dlg
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_modality_dialog_cancel(qtbot, pref_image):
     assert pref_image.completed is False
     pref_image.cancel_add.click()
     assert pref_image.completed is False
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_modality_dialog_continue_no_tag(qtbot, pref_image):
     assert pref_image.completed is False
     pref_image.add_mod_to_wsireg.click()
     assert pref_image.completed is False
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_modality_dialog_continue_add_tag(qtbot, pref_image):
     assert pref_image.completed is False
     pref_image.tag.setText("t1")
@@ -105,31 +111,37 @@ def test_add_modality_dialog_continue_add_tag(qtbot, pref_image):
     assert pref_image.completed is True
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_modality_dialog_import_tag_spacing(qtbot, pref_image_opt):
     assert pref_image_opt.tag.text() == "t1"
     assert pref_image_opt.spacing.text() == "0.5"
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_modality_dialog_with_image_data(qtbot, pref_image_image_data):
     assert pref_image_image_data.prepro_cntrl.image_type.currentText() == "Brightfield"
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_modality_dialog_with_image_data_fl(qtbot, pref_image_image_data_fl):
     assert (
         pref_image_image_data_fl.prepro_cntrl.image_type.currentText() == "Fluorescence"
     )
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_modality_dialog_create_combo(qtbot, pref_attachment):
     assert pref_attachment.attachment_combo.count() == 3
     qbox = pref_attachment._create_combo_group(["a1", "a2", "a3", "a4"])
     assert qbox.count() == 4
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_modality_dialog_no_attach(qtbot, pref_attachment_no_tags):
     assert pref_attachment_no_tags.completed is False
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_merge_modality_set_tag(qtbot, add_merge_modality):
     assert add_merge_modality.completed is False
     add_merge_modality.continue_add.click()
@@ -139,6 +151,7 @@ def test_add_merge_modality_set_tag(qtbot, add_merge_modality):
     assert add_merge_modality.completed is True
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_add_merge_modality_cancel(qtbot, add_merge_modality):
     assert add_merge_modality.completed is False
     add_merge_modality.cancel_add.click()

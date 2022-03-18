@@ -67,6 +67,7 @@ def test_CziWsiRegImage_rgb_data():
     im_fp = private_dir / "czi_rgb.czi"
     czi_wsi = CziWsiRegImage(im_fp)
     czi_wsi.prepare_image_data()
+    czi_wsi._get_thumbnail()
 
     assert isinstance(czi_wsi.dask_pyr, list) is True
     assert isinstance(czi_wsi.dask_pyr[0], da.Array) is True
@@ -93,6 +94,7 @@ def test_CziWsiRegImage_mc_data_mini():
     im_fp = fixtures_dir / "mini_czi_mc.czi"
     czi_wsi = CziWsiRegImage(im_fp)
     czi_wsi.prepare_image_data()
+    czi_wsi._get_thumbnail()
 
     assert isinstance(czi_wsi.dask_pyr, list) is True
     assert isinstance(czi_wsi.dask_pyr[0], da.Array) is True
@@ -118,7 +120,7 @@ def test_CziWsiRegImage_rgb_data_mini():
     im_fp = private_dir / "czi_rgb.czi"
     czi_wsi = CziWsiRegImage(im_fp)
     czi_wsi.prepare_image_data()
-
+    czi_wsi._get_thumbnail()
     assert isinstance(czi_wsi.dask_pyr, list) is True
     assert isinstance(czi_wsi.dask_pyr[0], da.Array) is True
     assert isinstance(czi_wsi.thumbnail, da.Array) is True
@@ -130,6 +132,7 @@ def test_CziWsiRegImage_mc_thumbnail():
     im_fp = fixtures_dir / "mini_czi_mc.czi"
     czi_wsi = CziWsiRegImage(im_fp)
     czi_wsi.prepare_image_data()
+    czi_wsi._get_thumbnail()
 
     assert czi_wsi.shape[0] == 3
     assert len(czi_wsi.shape) == 3
