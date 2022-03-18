@@ -116,6 +116,7 @@ def test_CziWsiRegImage_rgb_metadata_mini():
     assert czi_wsi.channel_names == ["Brigh"]
 
 
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_CziWsiRegImage_rgb_data_mini():
     im_fp = private_dir / "czi_rgb.czi"
     czi_wsi = CziWsiRegImage(im_fp)
