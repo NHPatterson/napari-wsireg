@@ -250,6 +250,7 @@ def test_TiffFileWsiRegImage_rgb_non_ome_data():
     assert isinstance(tf_wsi.dask_pyr[0], da.Array) is True
     assert isinstance(tf_wsi.thumbnail, da.Array) is True
     assert tf_wsi.dask_pyr[0].shape == tf_wsi.shape
+    assert tf_wsi.thumbnail_spacing[0] > 0
 
 
 def test_TiffFileWsiRegImage_sc_metadata():
@@ -278,6 +279,7 @@ def test_TiffFileWsiRegImage_sc_data():
     assert isinstance(tf_wsi.dask_pyr[0], da.Array) is True
     assert isinstance(tf_wsi.thumbnail, da.Array) is True
     assert tf_wsi.dask_pyr[0].shape == tf_wsi.shape
+    assert tf_wsi.thumbnail_spacing[0] > 0
 
 
 def test_TiffFileWsiRegImage_sc_data_thumbnail():
@@ -289,3 +291,4 @@ def test_TiffFileWsiRegImage_sc_data_thumbnail():
     assert isinstance(tf_wsi.dask_pyr[0], da.Array) is True
     assert isinstance(tf_wsi.thumbnail, da.Array) is True
     assert tf_wsi.dask_pyr[0].shape == tf_wsi.shape
+    assert tf_wsi.thumbnail_spacing[0] > 0

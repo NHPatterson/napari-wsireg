@@ -123,3 +123,21 @@ def test_CziWsiRegImage_rgb_data_mini():
     assert isinstance(czi_wsi.dask_pyr[0], da.Array) is True
     assert isinstance(czi_wsi.thumbnail, da.Array) is True
     assert czi_wsi.dask_pyr[0].shape == czi_wsi.shape
+    assert czi_wsi.thumbnail_spacing[0] > 0
+
+
+def test_CziWsiRegImage_mc_thumbnail():
+    im_fp = fixtures_dir / "mini_czi_mc.czi"
+    czi_wsi = CziWsiRegImage(im_fp)
+    czi_wsi.prepare_image_data()
+
+    assert czi_wsi.shape[0] == 3
+    assert len(czi_wsi.shape) == 3
+    assert czi_wsi.is_rgb is False
+    assert czi_wsi.pixel_spacing == (0.65, 0.65)
+    assert czi_wsi.channel_axis == 0
+    assert czi_wsi.is_interleaved is False
+    assert czi_wsi.n_ch == 3
+    assert czi_wsi.channel_names == ["DAPI", "EGFP", "DsRed"]
+    assert czi_wsi.channel_colors is not None
+    assert czi_wsi.thumbnail_spacing[0] > 0

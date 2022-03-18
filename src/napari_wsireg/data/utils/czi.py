@@ -180,7 +180,11 @@ def get_czi_thumbnail(
     ch_idx = czi.axes.index("C")
     l_blocks = get_level_blocks(czi)
     lowest_im = np.max(list(l_blocks.keys()))
-    calc_thumbnail_spacing = np.asarray(pixel_spacing) * lowest_im
+    if lowest_im == 0:
+        calc_thumbnail_spacing = np.asarray(pixel_spacing) * 1
+    else:
+        calc_thumbnail_spacing = np.asarray(pixel_spacing) * lowest_im
+
     thumbnail_spacing = (
         float(calc_thumbnail_spacing[0]),
         float(calc_thumbnail_spacing[1]),
