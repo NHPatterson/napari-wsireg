@@ -9,11 +9,11 @@ HERE = Path(os.path.dirname(__file__))
 
 
 REASON = "private data"
-SKIP_PRIVATE = True
+SKIP_PRIVATE = False
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-@pytest.fixture
+@pytest.fixture(scope="function")
 def wsi_reg_fixture(make_napari_viewer):
     # make viewer and add an image layer using our fixture
     viewer = make_napari_viewer()
@@ -79,88 +79,86 @@ def test_WsiReg2DMain_add_modalities(wsi_reg_fixture, capsys):
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_wsireg_test_switching(wsi_reg_fixture):
+
     wsi_reg_fixture.current_mod_in_prepro.text()
     wsi_reg_fixture.reg_graph.modalities[wsi_reg_fixture.image_mods[0]]
 
-    wsi_reg_fixture.mod_list.setCurrentRow(0)
+    wsi_reg_fixture.mod_list.setCurrentRow(1)
     wsi_reg_fixture._switch_preprocessing_modality()
     wsi_reg_fixture.prepro_main_ctrl.image_type.setCurrentText("Brightfield")
     wsi_reg_fixture._update_preprocessing()
-    wsi_reg_fixture.mod_list.setCurrentRow(1)
+    wsi_reg_fixture.mod_list.setCurrentRow(2)
     wsi_reg_fixture._switch_preprocessing_modality()
 
-    wsi_reg_fixture.mod_list.setCurrentRow(0)
+    wsi_reg_fixture.mod_list.setCurrentRow(1)
     wsi_reg_fixture._switch_preprocessing_modality()
 
     assert wsi_reg_fixture.prepro_main_ctrl.image_type.currentText() == "Brightfield"
-
-    wsi_reg_fixture.mod_list.setCurrentRow(1)
+    print(wsi_reg_fixture.layer_data.keys())
+    wsi_reg_fixture.mod_list.setCurrentRow(2)
+    print(wsi_reg_fixture.layer_data.keys())
     wsi_reg_fixture._switch_preprocessing_modality()
     wsi_reg_fixture.prepro_main_ctrl.flip.setCurrentText("h")
+
     assert wsi_reg_fixture.prepro_main_ctrl.image_type.currentText() == "Fluorescence"
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_wsireg_add_reg_path(wsi_reg_fixture):
 
-    wsi_reg_fixture.mod_list.setCurrentRow(0)
-    wsi_reg_fixture._switch_preprocessing_modality()
-
     wsi_reg_fixture.path_ctrl.source_select.setCurrentText(
-        wsi_reg_fixture.image_mods[0]
+        wsi_reg_fixture.image_mods[1]
     )
     wsi_reg_fixture.path_ctrl.target_select.setCurrentText(
-        wsi_reg_fixture.image_mods[1]
+        wsi_reg_fixture.image_mods[2]
     )
 
     wsi_reg_fixture.add_reg_path_to_graph()
 
-    assert wsi_reg_fixture.reg_graph.reg_paths[wsi_reg_fixture.image_mods[0]] == [
-        wsi_reg_fixture.image_mods[1]
+    assert wsi_reg_fixture.reg_graph.reg_paths[wsi_reg_fixture.image_mods[1]] == [
+        wsi_reg_fixture.image_mods[2]
     ]
 
     wsi_reg_fixture.path_ctrl.source_select.setCurrentText(
-        wsi_reg_fixture.image_mods[0]
+        wsi_reg_fixture.image_mods[3]
     )
-    wsi_reg_fixture.path_ctrl.thru_select.setCurrentText(wsi_reg_fixture.image_mods[2])
+    wsi_reg_fixture.path_ctrl.thru_select.setCurrentText(wsi_reg_fixture.image_mods[1])
 
     wsi_reg_fixture.path_ctrl.target_select.setCurrentText(
-        wsi_reg_fixture.image_mods[1]
+        wsi_reg_fixture.image_mods[2]
     )
 
     wsi_reg_fixture.add_reg_path_to_graph()
 
-    assert wsi_reg_fixture.reg_graph.reg_paths[wsi_reg_fixture.image_mods[0]] == [
-        wsi_reg_fixture.image_mods[2],
+    assert wsi_reg_fixture.reg_graph.reg_paths[wsi_reg_fixture.image_mods[3]] == [
         wsi_reg_fixture.image_mods[1],
+        wsi_reg_fixture.image_mods[2],
     ]
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_wsireg_reg_path_switching(wsi_reg_fixture):
-    wsi_reg_fixture.mod_list.setCurrentRow(0)
-    wsi_reg_fixture._switch_preprocessing_modality()
 
     wsi_reg_fixture.path_ctrl.source_select.setCurrentText(
-        wsi_reg_fixture.image_mods[0]
+        wsi_reg_fixture.image_mods[1]
     )
     wsi_reg_fixture._update_path_possibilties()
-    wsi_reg_fixture.path_ctrl.thru_select.setCurrentText(wsi_reg_fixture.image_mods[1])
+    wsi_reg_fixture.path_ctrl.thru_select.setCurrentText(wsi_reg_fixture.image_mods[2])
     wsi_reg_fixture._update_paths_on_through()
 
     assert (
         wsi_reg_fixture.path_ctrl.target_select.currentText()
-        != wsi_reg_fixture.image_mods[1]
+        != wsi_reg_fixture.image_mods[2]
     )
 
     wsi_reg_fixture.path_ctrl.thru_select.setCurrentText("None")
     wsi_reg_fixture._update_paths_on_through()
     wsi_reg_fixture.path_ctrl.target_select.setCurrentText(
-        wsi_reg_fixture.image_mods[1]
+        wsi_reg_fixture.image_mods[2]
     )
     wsi_reg_fixture._update_paths_on_target()
 
     assert (
         wsi_reg_fixture.path_ctrl.target_select.currentText()
-        == wsi_reg_fixture.image_mods[1]
+        == wsi_reg_fixture.image_mods[2]
     )

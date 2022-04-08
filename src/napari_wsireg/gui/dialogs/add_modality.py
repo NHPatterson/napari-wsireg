@@ -33,6 +33,7 @@ class AddModality(QDialog):
         image_data: Optional[Union[CziWsiRegImage, TiffFileWsiRegImage]] = None,
         image_spacings: Optional[Dict[str, Union[int, float]]] = None,
         preprocessing: Optional[ImagePreproParams] = None,
+        all_entities: List[str] = [],
     ):
         super().__init__(parent=parent)
         box_layout = QVBoxLayout()
@@ -53,11 +54,13 @@ class AddModality(QDialog):
         self.image_spacings = image_spacings
 
         self.tag = QLineEdit()
-
+        self._all_entities = all_entities
+        self._mode = mode
         if tag:
             self.tag.setText(tag)
             self.tag.setReadOnly(True)
             self.spacing.setReadOnly(True)
+        self._original_tag = tag
 
         image_fp_label = QLineEdit()
         image_fp_label.setReadOnly(True)
@@ -91,9 +94,13 @@ class AddModality(QDialog):
         self.layout().addWidget(input_widg)
 
         if not attachment:
+            channel_names = image_data.channel_names
             self.layout().addWidget(self.prepro_cntrl)
             if preprocessing:
-                self.prepro_cntrl._import_data(preprocessing)
+                self.prepro_cntrl._import_data(preprocessing, channel_names)
+            else:
+                channel_status = None
+            self.prepro_cntrl._add_channels(channel_names, channel_status)
 
         bottom_layout = QFormLayout()
         if mode == "load":
@@ -151,6 +158,18 @@ class AddModality(QDialog):
             self.tag.setFocus()
             return
 
+        elif self.tag.text() in self._all_entities:
+            if self._mode != "edit":
+                emsg = QErrorMessage(self)
+                emsg.showMessage(
+                    f'Modality tag "{self.tag.text()}" is not unique and already exists '
+                    f'as an entity in the reg graph: "{self._all_entities}"'
+                )
+                self.tag.setFocus()
+                return
+            else:
+                self.completed = True
+                self.close()
         else:
             self.completed = True
             self.close()

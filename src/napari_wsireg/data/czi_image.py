@@ -40,7 +40,10 @@ class CziWsiRegImage(WsiRegImage):
 
         cnames = []
         for ch in channels_meta:
-            cnames.append(ch.get("ShortName"))
+            if ch.get("ShortName"):
+                cnames.append(ch.get("ShortName"))
+            else:
+                cnames.append(ch.get("Name"))
 
         self._channel_names = cnames
 

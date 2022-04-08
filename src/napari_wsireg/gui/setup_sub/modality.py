@@ -82,6 +82,7 @@ class ModalityControl(QWidget):
         self.add_msk_btn = QPushButton("+  Mask")
 
         self.del_mod_btn = QPushButton("-  Remove")
+        self.clr_mod_btn = QPushButton("   Clear")
         self.edt_mod_btn = QPushButton("   Edit")
 
         from_file_label.setStyleSheet("text-align:left;")
@@ -100,6 +101,7 @@ class ModalityControl(QWidget):
         self.add_msk_btn.setFont(btn_font)
 
         self.del_mod_btn.setFont(btn_font)
+        self.clr_mod_btn.setFont(btn_font)
         self.edt_mod_btn.setFont(btn_font)
 
         btn_layout = QVBoxLayout()
@@ -139,9 +141,11 @@ class ModalityControl(QWidget):
         widg_layout.addLayout(from_nap_layout)
         edit_rm_layout = QHBoxLayout()
         self.edt_mod_btn.setMaximumWidth(100)
+        self.clr_mod_btn.setMaximumWidth(100)
         self.del_mod_btn.setMaximumWidth(100)
         # edit_rm_layout.addSpacerItem()
         edit_rm_layout.addWidget(self.edt_mod_btn)
+        edit_rm_layout.addWidget(self.clr_mod_btn)
         edit_rm_layout.addWidget(self.del_mod_btn)
         self.layout().addLayout(widg_layout)
         self.layout().addLayout(edit_rm_layout)

@@ -1,6 +1,6 @@
 # Things to do
 
-## first priority, initial release, working version
+## Priority Level 1
 - [x] Remove layers from viewer on layer deletion
 - [x] Pop merge modalities on modality removal (with warning)
 - [x] Vis options on import (thumbnail)
@@ -13,10 +13,11 @@
   - [x] cache layer data in output directory as geojson
 - [x] in-memory-np-array image to wsireg
   - [x] Implement saving the image with metadata
-- [ ] Channel selection
+- [x] Channel selection
+- [ ] Clear all info on adding graph to queue, graph completion or "Clear" button
 
 
-## second priority
+## Priority Level 2
 - [x] Queueing system
   - [x] Queue GUI
   - [x] Smart thread worker
@@ -25,5 +26,5 @@
   - [ ] See plots
 
 
-## third priority
+## Priority Level 3
 - [ ] GUI for serial 3D experiments

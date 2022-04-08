@@ -17,7 +17,7 @@ def tifffile_to_dask(
             try:
                 sub_im = da.from_zarr(imdata[i])
                 dask_imdata.append(sub_im)
-            except IndexError:
+            except (KeyError, IndexError):
                 continue
     else:
         dask_imdata = da.from_zarr(imdata)

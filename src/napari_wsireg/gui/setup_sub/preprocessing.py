@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -9,10 +9,26 @@ from qtpy.QtWidgets import (
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
+    QHBoxLayout,
     QWidget,
+    QListWidget,
+    QListWidgetItem,
 )
+from qtpy.QtCore import Qt
 from superqt import QCollapsible
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
+
+
+class QChannelItem(QListWidgetItem):
+    def __init__(
+        self,
+        channel_name: str,
+    ):
+        super(QChannelItem, self).__init__()
+        self.channel_name = channel_name
+        self.setText(self.channel_name)
+        self.setFlags(self.flags() | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+        self.setCheckState(1)
 
 
 class PreprocessingControl(QGroupBox):
@@ -71,25 +87,33 @@ class PreprocessingControl(QGroupBox):
         self.selection_widg = QTabWidget()
         int_widg = QWidget()
         spat_widg = QWidget()
+        int_widg_top_level_layout = QHBoxLayout()
+        int_box_layout = QVBoxLayout()
+        int_left_top_layout = QFormLayout()
+        int_right_layout = QFormLayout()
+        int_left_top_layout.layout().addRow(QLabel("Image type"), self.image_type)
 
-        self.int_prepro_layout = QFormLayout()
+        self.channel_list = QListWidget()
+        self.channel_list.setMaximumWidth(200)
+        self.channel_list.setMaximumHeight(100)
 
-        self.int_prepro_layout.layout().addRow(QLabel("Image type"), self.image_type)
-        self.int_prepro_layout.layout().addRow(
+        int_box_layout.addLayout(int_left_top_layout)
+        channel_header = QLabel("<b>Channels: Use / Name</b>")
+        int_box_layout.addWidget(channel_header)
+        int_box_layout.addWidget(self.channel_list)
+        int_right_layout.layout().addRow(
             QLabel("Max intensity projection"), self.max_int_proj
         )
-        self.int_prepro_layout.layout().addRow(
-            QLabel("Data to np.uint8"), self.as_uint8
-        )
-        self.int_prepro_layout.layout().addRow(
+        int_right_layout.layout().addRow(QLabel("Data to np.uint8"), self.as_uint8)
+        int_right_layout.layout().addRow(
             QLabel("Enhance contrast"), self.contrast_enhance
         )
-        self.int_prepro_layout.layout().addRow(
+        int_right_layout.layout().addRow(
             QLabel("Invert intensity"), self.invert_intensity
         )
-
-        int_widg.setLayout(self.int_prepro_layout)
-
+        int_widg_top_level_layout.addLayout(int_box_layout)
+        int_widg_top_level_layout.addLayout(int_right_layout)
+        int_widg.setLayout(int_widg_top_level_layout)
         self.spat_prepro_layout = QFormLayout()
 
         self.spat_prepro_layout.layout().addRow(QLabel("Rotation (cc)"), self.rot_cc)
@@ -138,7 +162,45 @@ class PreprocessingControl(QGroupBox):
 
         self.image_type.setCurrentText(str(current_type))
 
-    def _import_data(self, preprocessing_data: ImagePreproParams) -> None:
+    def _add_channels(
+        self, channel_names: List[str], check_status: Optional[List[bool]] = None
+    ):
+        self.channel_list.clear()
+        if check_status and channel_names:
+            for channel, status in zip(channel_names, check_status):
+                ch_item = QChannelItem(channel)
+                status_flag = 2 if status else 0
+                ch_item.setCheckState(status_flag)
+                self.channel_list.addItem(ch_item)
+        elif check_status:
+            channel_names = [f"C{str(i).zfill(2)}" for i in range(len(check_status))]
+            for channel, status in zip(channel_names, check_status):
+                ch_item = QChannelItem(channel)
+                status_flag = 2 if status else 0
+                ch_item.setCheckState(status_flag)
+                self.channel_list.addItem(ch_item)
+        else:
+            for channel in channel_names:
+                ch_item = QChannelItem(channel)
+                ch_item.setCheckState(2)
+                self.channel_list.addItem(ch_item)
+
+    def _ch_indices_to_status(self, channel_names: List[str], ch_indices: List[int]):
+        if ch_indices:
+            status = []
+            for i in range(len(channel_names)):
+                if i in ch_indices:
+                    status.append(True)
+                else:
+                    status.append(False)
+        else:
+            status = [True for _ in range(len(channel_names))]
+
+        return status
+
+    def _import_data(
+        self, preprocessing_data: ImagePreproParams, channel_names: List[str]
+    ) -> None:
         # boolean
         self.max_int_proj.setChecked(preprocessing_data.max_int_proj)
         self.as_uint8.setChecked(preprocessing_data.as_uint8)
@@ -165,6 +227,12 @@ class PreprocessingControl(QGroupBox):
         else:
             self.image_type.setCurrentText("Fluorescence")
 
+        # channel data
+        status = self._ch_indices_to_status(
+            channel_names, preprocessing_data.ch_indices
+        )
+        self._add_channels(channel_names, status)
+
         return preprocessing_data
 
     def _export_data(self) -> Dict[str, Any]:
@@ -181,6 +249,17 @@ class PreprocessingControl(QGroupBox):
         else:
             flip_val = None
 
+        ch_indices = []
+        channel_names = []
+        for ch_idx in range(self.channel_list.count()):
+            ch_item = self.channel_list.item(ch_idx)
+            channel_names.append(ch_item.text())
+            if ch_item.checkState() == 2:
+                ch_indices.append(ch_idx)
+
+        if len(ch_indices) == 0:
+            ch_indices = None
+
         preprocessing_params = {
             "image_type": image_type,
             "max_int_proj": self.max_int_proj.isChecked(),
@@ -192,5 +271,6 @@ class PreprocessingControl(QGroupBox):
             "downsampling": int(self.downsampling.value()),
             "crop_to_mask_bbox": self.crop_to_mask_bbox.isChecked(),
             "use_mask": self.use_mask.isChecked(),
+            "ch_indices": ch_indices,
         }
-        return preprocessing_params
+        return preprocessing_params, channel_names

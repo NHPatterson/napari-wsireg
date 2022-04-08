@@ -26,7 +26,7 @@ from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.reg_shapes import RegShapes
 from wsireg.wsireg2d import WsiReg2D
 from wsireg.wsireg2d import main as wsireg2d_main
-
+from wsireg.utils.im_utils import ARRAYLIKE_CLASSES
 from napari_wsireg.data import (
     FILE_ERROR_MESSAGE,
     TIFFFILE_EXTS,
@@ -171,6 +171,10 @@ class WsiReg2DMain(QWidget):
         )
 
         self.prepro_main_ctrl.flip.currentTextChanged.connect(
+            self._update_preprocessing
+        )
+
+        self.prepro_main_ctrl.channel_list.itemChanged.connect(
             self._update_preprocessing
         )
 
@@ -382,7 +386,10 @@ class WsiReg2DMain(QWidget):
             image_data_loaded = True
 
         if image_data_loaded:
-            added_mod = AddModality(file_path, parent=self, image_data=image_data)
+            all_entities = self._get_all_entity_tags()
+            added_mod = AddModality(
+                file_path, parent=self, image_data=image_data, all_entities=all_entities
+            )
             if not no_dialog:
                 added_mod.setWindowTitle("Enter registration image information...")
                 added_mod.setWindowModality(Qt.ApplicationModal)
@@ -401,7 +408,7 @@ class WsiReg2DMain(QWidget):
                     mod_tag, mod_path, mod_spacing, "IMAGE", display_name
                 )
                 self.mod_list.addItem(mod_item)
-                preprocessing = added_mod.prepro_cntrl._export_data()
+                preprocessing, channel_names = added_mod.prepro_cntrl._export_data()
 
                 self.image_mods.append(mod_tag)
 
@@ -417,7 +424,11 @@ class WsiReg2DMain(QWidget):
                         use_thumbnail=added_mod.use_thumbnail.isChecked(),
                     )
                     self.reg_graph.add_modality(
-                        mod_tag, file_path, mod_spacing, preprocessing=preprocessing
+                        mod_tag,
+                        file_path,
+                        mod_spacing,
+                        preprocessing=preprocessing,
+                        channel_names=channel_names,
                     )
                 else:
                     selected_layer.name = mod_tag
@@ -431,10 +442,22 @@ class WsiReg2DMain(QWidget):
                         in_data = selected_layer.data
 
                     self.reg_graph.add_modality(
-                        mod_tag, in_data, mod_spacing, preprocessing=preprocessing
+                        mod_tag,
+                        in_data,
+                        mod_spacing,
+                        preprocessing=preprocessing,
                     )
 
                 self._update_path_possibilties()
+
+    def _get_all_entity_tags(self):
+        all_entities = []
+        all_entities.extend(self.image_mods)
+        all_entities.extend(self.attachment_mods)
+        all_entities.extend(self.shape_mods)
+        all_entities.extend(list(self.merge_mods.keys()))
+        all_entities.extend(list(self.mask_mods.keys()))
+        return all_entities
 
     def _run_add_image(
         self,
@@ -527,6 +550,8 @@ class WsiReg2DMain(QWidget):
             image_data = None
             image_data_loaded = True
 
+        all_entities = self._get_all_entity_tags()
+
         if image_data_loaded:
             try:
                 added_mod = AddModality(
@@ -535,6 +560,7 @@ class WsiReg2DMain(QWidget):
                     attachment=True,
                     attachment_tags=self.image_mods,
                     image_spacings=self.image_spacings,
+                    all_entities=all_entities,
                 )
                 if not no_dialog:
                     added_mod.setWindowTitle("Enter attachment image information...")
@@ -637,12 +663,15 @@ class WsiReg2DMain(QWidget):
         if from_file:
             shape_data = RegShapes(file_path)
 
+        all_entites = self._get_all_entity_tags()
+
         added_mod = AddModality(
             file_path,
             parent=self,
             attachment=True,
             attachment_tags=self.image_mods,
             image_spacings=self.image_spacings,
+            all_entities=all_entites,
         )
         if not no_dialog:
             added_mod.setWindowTitle("Enter attachment shape information...")
@@ -701,7 +730,7 @@ class WsiReg2DMain(QWidget):
             return
 
         is_shapes = False
-
+        all_entities = self._get_all_entity_tags()
         if from_file:
             if Path(file_path).suffix.lower() in [".geojson", ".json"]:
                 mask_data = RegShapes(file_path)
@@ -715,6 +744,7 @@ class WsiReg2DMain(QWidget):
             attachment=True,
             attachment_tags=self.image_mods,
             image_spacings=self.image_spacings,
+            all_entities=all_entities,
         )
         if not no_dialog:
             added_mod.setWindowTitle("Enter image mask info...")
@@ -745,10 +775,11 @@ class WsiReg2DMain(QWidget):
                 if is_shapes:
                     self._add_shapes_to_viewer(mod_tag, mask_data, mod_spacing)
                 else:
+                    mask_data._pixel_spacing = (mod_spacing, mod_spacing)
                     self._run_add_image(
                         mod_tag,
                         mask_data,
-                        use_thumbnail=added_mod.use_thumbnail.isChecked(),
+                        use_thumbnail=False,
                     )
                 self.reg_graph.modalities[attachment_modality]["mask"] = file_path
             else:
@@ -815,39 +846,39 @@ class WsiReg2DMain(QWidget):
         return mod_data
 
     def _edit_data(self):
-        mod_tag, mod_path, mod_spacing, mod_type = self._get_current_mod_item()
-
-        if mod_type.name == "MERGE":
-            return
-
-        if mod_type.name == "IMAGE":
-            preprocessing = self.reg_graph.modalities[mod_tag]["preprocessing"]
-
-        if mod_type.name in ["SHAPE", "ATTACHMENT_IMAGE"]:
-            attachment = True
-        else:
-            attachment = False
-
-        edited_mod = AddModality(
-            file_path=mod_path,
-            spacing=float(mod_spacing.split(" (")[0]),
-            tag=mod_tag,
-            parent=self,
-            mode="edit",
-            attachment=attachment,
-            attachment_tags=self.image_mods,
-            preprocessing=preprocessing,
-        )
-        edited_mod.setWindowTitle("Edit image preprocessing information...")
-        edited_mod.setWindowModality(Qt.ApplicationModal)
-        edited_mod.exec_()
-
-        if not attachment:
-            preprocessing = edited_mod.prepro_cntrl._export_data()
-            self.reg_graph.modalities[mod_tag]["preprocessing"] = ImagePreproParams(
-                **preprocessing
+        mod_items = self.mod_list.selectedItems()
+        if len(mod_items) == 1:
+            mod_tag, mod_path, mod_spacing, mod_type = self._get_current_mod_item()
+            if mod_type.name == "MERGE":
+                return
+            if mod_type.name == "IMAGE":
+                preprocessing = self.reg_graph.modalities[mod_tag]["preprocessing"]
+            if mod_type.name in ["SHAPE", "ATTACHMENT_IMAGE"]:
+                attachment = True
+            else:
+                attachment = False
+            all_entities = self._get_all_entity_tags()
+            edited_mod = AddModality(
+                file_path=mod_path,
+                spacing=mod_spacing,
+                tag=mod_tag,
+                parent=self,
+                mode="edit",
+                attachment=attachment,
+                attachment_tags=self.image_mods,
+                preprocessing=preprocessing,
+                all_entities=all_entities,
             )
-            self._update_preprocessing()
+            edited_mod.setWindowTitle("Edit image preprocessing information...")
+            edited_mod.setWindowModality(Qt.ApplicationModal)
+            edited_mod.exec_()
+
+            if not attachment:
+                preprocessing, channel_names = edited_mod.prepro_cntrl._export_data()
+                self.reg_graph.modalities[mod_tag]["preprocessing"] = ImagePreproParams(
+                    **preprocessing
+                )
+                self._update_preprocessing()
 
     def _switch_preprocessing_modality(self):
         mod_tag, _, _, mod_type = self._get_current_mod_item()
@@ -857,7 +888,10 @@ class WsiReg2DMain(QWidget):
             prepro_params = deepcopy(
                 self.reg_graph.modalities[mod_tag]["preprocessing"]
             )
-            self.prepro_main_ctrl._import_data(prepro_params)
+            channel_names = deepcopy(
+                self.reg_graph.modalities[mod_tag]["channel_names"]
+            )
+            self.prepro_main_ctrl._import_data(prepro_params, channel_names)
             self._update_preprocessing()
         else:
             self.current_mod_in_prepro.setText("[no preprocessing data type]")
@@ -1066,10 +1100,14 @@ class WsiReg2DMain(QWidget):
     def _update_preprocessing(self):
         mod_tag = self.current_mod_in_prepro.text()
         if mod_tag not in ["[no preprocessing data type]", "[none selected]"]:
-            preprocessing = deepcopy(self.prepro_main_ctrl._export_data())
+            preprocessing, channel_names = deepcopy(
+                self.prepro_main_ctrl._export_data()
+            )
             self.reg_graph.modalities[mod_tag]["preprocessing"] = ImagePreproParams(
                 **preprocessing
             )
+            self.reg_graph.modalities[mod_tag]["channel_names"] = channel_names
+            print(preprocessing["ch_indices"])
 
     def _find_poss_path_thru_target(
         self, current_mods: List[str], source_mod: str
@@ -1099,6 +1137,10 @@ class WsiReg2DMain(QWidget):
 
     def _update_path_possibilties(self):
         current_mods = deepcopy(self.image_mods)
+        if len(self.image_mods) == 0:
+            self.path_ctrl.source_select.clear()
+            self.path_ctrl.thru_select.clear()
+            self.path_ctrl.target_select.clear()
 
         if len(self.image_mods) > 1:
             self.path_ctrl.thru_select.clear()
@@ -1191,6 +1233,7 @@ class WsiReg2DMain(QWidget):
                         )
                         self.mod_list.addItem(mod_item)
                         self.merge_mods.update({merge_tag: mod_tags})
+                        self.reg_graph.add_merge_modalities(merge_tag, mod_tags)
                 else:
                     emsg = QErrorMessage(self)
                     emsg.showMessage(
@@ -1412,15 +1455,19 @@ class WsiReg2DMain(QWidget):
                 shape_data["shape_files"] = output_shapes_fp
 
         for image_name, image_data in self.reg_graph.modalities.items():
-            if image_data["image_filepath"] == "in-memory layer":
+            if (
+                isinstance(image_data["image_filepath"], ARRAYLIKE_CLASSES)
+                or image_data["image_filepath"] == "in-memory layer"
+            ):
                 output_fp = str(
                     self.reg_graph.output_dir
                     / f"{self.reg_graph.project_name}-{image_name}-from-napari-layer.tiff"
                 )
-                output_shapes_fp = write_image_from_napari(
+                print(output_fp)
+                output_image_fp = write_image_from_napari(
                     self.layer_data[image_name].data, output_fp
                 )
-                image_data["image_filepath"] = output_shapes_fp
+                image_data["image_filepath"] = output_image_fp
             if isinstance(image_data["mask"], str):
                 if (
                     Path(image_data["mask"]).suffix.lower() == ".geojson"
@@ -1459,19 +1506,21 @@ class WsiReg2DMain(QWidget):
             self.reg_graph.cache_images = cache_images
             reg_opts = self._get_proj_opts()
 
-        self._pbar = progress(total=0)
-        self._pbar.set_description(f"Registering graph {self.reg_graph.project_name}")
-        graph_runner_worker = self._run_registration(self.reg_graph, reg_opts)
-        graph_runner_worker.returned.connect(
-            self._add_registered_data_from_executed_graph
-        )
-        graph_runner_worker.finished.connect(
-            lambda: self._pbar.set_description(
-                f"finished registered {self.reg_graph.project_name}"
+            self._pbar = progress(total=0)
+            self._pbar.set_description(
+                f"Registering graph {self.reg_graph.project_name}"
             )
-        )
-        graph_runner_worker.finished.connect(self._pbar.close)
-        self._threadpool.start(graph_runner_worker)
+            graph_runner_worker = self._run_registration(self.reg_graph, reg_opts)
+            graph_runner_worker.returned.connect(
+                self._add_registered_data_from_executed_graph
+            )
+            graph_runner_worker.finished.connect(
+                lambda: self._pbar.set_description(
+                    f"finished registered {self.reg_graph.project_name}"
+                )
+            )
+            graph_runner_worker.finished.connect(self._pbar.close)
+            self._threadpool.start(graph_runner_worker)
 
     @thread_worker
     def _run_registration(self, reg_graph: WsiReg2D, reg_opts: dict) -> List[str]:
