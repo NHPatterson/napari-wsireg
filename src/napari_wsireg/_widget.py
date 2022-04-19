@@ -87,6 +87,7 @@ class WsiReg2DMain(QWidget):
         self.add_msk_nap_btn = self.setup.mod_ctrl.add_msk_nap_btn
 
         self.del_mod_btn = self.setup.mod_ctrl.del_mod_btn
+        self.clr_mod_btn = self.setup.mod_ctrl.clr_mod_btn
         self.edit_mod_btn = self.setup.mod_ctrl.edt_mod_btn
 
         self.mod_list = self.setup.mod_ctrl.mod_list
@@ -145,7 +146,9 @@ class WsiReg2DMain(QWidget):
         self.add_msk_nap_btn.clicked.connect(lambda: self.add_nap_data("mask"))
 
         self.del_mod_btn.clicked.connect(self.delete_modality)
+        self.clr_mod_btn.clicked.connect(lambda: self._clear_graph("clear"))
         self.edit_mod_btn.clicked.connect(self._edit_data)
+
         self.mod_list.itemDoubleClicked.connect(self._edit_data)
         self.mod_list.clicked.connect(self._switch_preprocessing_modality)
 
@@ -975,12 +978,11 @@ class WsiReg2DMain(QWidget):
             if attachment_key in v:
                 v.pop(v.index(attachment_key))
 
-    def delete_modality(self):
+    def delete_modality(self, warn: bool = True):
         mod_data = self._get_all_selected_mod_tags()
         all_associated_mods = []
-        for mod_tag, mod_type in mod_data:
 
-            self.mod_list.takeItem(self.mod_list.currentRow())
+        for mod_tag, mod_type in mod_data:
             if mod_type.name not in ["MERGE", "MASK"]:
                 self.reg_graph.remove_modality(mod_tag)
                 self.current_mod_in_prepro.setText("[none selected]")
@@ -998,47 +1000,53 @@ class WsiReg2DMain(QWidget):
                     associated_mods = deepcopy(self.attachment_keys[mod_tag])
                     all_associated_mods.extend(associated_mods)
 
-                if mod_type.name == "ATTACHMENT_IMAGE":
-                    self.attachment_mods.pop(self.attachment_mods.index(mod_tag))
-                    self._clear_attachment_keys(mod_tag)
+                if mod_tag in self.shape_mods or mod_tag in self.attachment_mods:
+                    if mod_type.name == "ATTACHMENT_IMAGE":
+                        self.attachment_mods.pop(self.attachment_mods.index(mod_tag))
+                        self._clear_attachment_keys(mod_tag)
 
-                if mod_type.name == "SHAPE":
-                    self.shape_mods.pop(self.shape_mods.index(mod_tag))
-                    self._clear_attachment_keys(mod_tag)
-
-                ld = self.layer_data.pop(mod_tag)
-                if isinstance(ld, list):
-                    for layer in ld:
-                        self.viewer.layers.pop(self.viewer.layers.index(layer.name))
-                else:
-                    self.viewer.layers.pop(self.viewer.layers.index(ld.name))
+                    if mod_type.name == "SHAPE":
+                        try:
+                            self.shape_mods.pop(self.shape_mods.index(mod_tag))
+                        except ValueError:
+                            pass
+                        self._clear_attachment_keys(mod_tag)
+                try:
+                    self._pop_napari_layer_data(mod_tag)
+                except (ValueError, KeyError):
+                    pass
 
             elif mod_type.name == "MASK":
-                ld = self.layer_data.pop(mod_tag)
-                self.viewer.layers.pop(self.viewer.layers.index(ld.name))
-                attachment_modality = self.mask_mods[mod_tag]
-                self.reg_graph.modalities[attachment_modality]["mask"] = None
+                if mod_tag in self.mask_mods.keys():
+                    self._pop_napari_layer_data(mod_tag)
+                    attachment_modality = self.mask_mods[mod_tag]
+                    try:
+                        self.reg_graph.modalities[attachment_modality]["mask"] = None
+                    except KeyError:
+                        pass
 
             elif mod_type.name == "MERGE":
-                self.merge_mods.pop(mod_tag)
-                self.reg_graph.remove_merge_modality(mod_tag)
+                if mod_tag in self.merge_mods:
+                    self.merge_mods.pop(mod_tag)
+                    self.reg_graph.remove_merge_modality(mod_tag)
 
             to_rm = []
             for merge_name, merge_mods in self.merge_mods.items():
                 if mod_tag in merge_mods:
                     to_rm.append(merge_name)
-                    msg = QMessageBox(self)
-                    msg.setIcon(QMessageBox.Warning)
-                    msg.setText("Merge modality removed")
-                    msg.setInformativeText(
-                        f"{mod_tag} was assoicated with a merge modality with tag {merge_name} and"
-                        f" {merge_name} was removed from the merge modalities"
-                    )
-                    msg.setWindowTitle(
-                        f"{merge_name} - removed with associated data {mod_tag}"
-                    )
-                    msg.setWindowModality(Qt.NonModal)
-                    msg.exec_()
+                    if warn:
+                        msg = QMessageBox(self)
+                        msg.setIcon(QMessageBox.Warning)
+                        msg.setText("Merge modality removed")
+                        msg.setInformativeText(
+                            f"{mod_tag} was assoicated with a merge modality with tag {merge_name} and"
+                            f" {merge_name} was removed from the merge modalities"
+                        )
+                        msg.setWindowTitle(
+                            f"{merge_name} - removed with associated data {mod_tag}"
+                        )
+                        msg.setWindowModality(Qt.NonModal)
+                        msg.exec_()
                     mod_tags = [
                         self.mod_list.item(ii).mod_tag
                         for ii in range(self.mod_list.count())
@@ -1072,21 +1080,33 @@ class WsiReg2DMain(QWidget):
                     self.shape_mods.pop(self.shape_mods.index(assoc_mod))
 
             if len(associated_mods) > 0:
-                msg = QMessageBox(self)
-                msg.setIcon(QMessageBox.Warning)
-                msg.setText("Associated modality has been removed")
-                msg.setInformativeText(
-                    f"<b>{mod_tag}</b> had assoicated data with tag(s) <b>{', '.join(associated_mods)}</b> and"
-                    f" <b>{', '.join(associated_mods)}</b> was(were) removed\n"
-                    f"<i>N.B.</i>: wsireg attachment modalities cannot be specified unattached"
-                )
-                msg.setWindowModality(Qt.NonModal)
-                msg.setWindowTitle(
-                    f"{mod_tag} - associated data removal warning: {assoc_mod}"
-                )
-                msg.exec_()
+                if warn:
+                    msg = QMessageBox(self)
+                    msg.setIcon(QMessageBox.Warning)
+                    msg.setText("Associated modality has been removed")
+                    msg.setInformativeText(
+                        f"<b>{mod_tag}</b> had assoicated data with tag(s) <b>{', '.join(associated_mods)}</b> and"
+                        f" <b>{', '.join(associated_mods)}</b> was(were) removed\n"
+                        f"<i>N.B.</i>: wsireg attachment modalities cannot be specified unattached"
+                    )
+                    msg.setWindowModality(Qt.NonModal)
+                    msg.setWindowTitle(
+                        f"{mod_tag} - associated data removal warning: {assoc_mod}"
+                    )
+                    msg.exec_()
+
+            for item in self.mod_list.selectedItems():
+                self.mod_list.takeItem(self.mod_list.indexFromItem(item).row())
 
             self._update_reg_plot()
+
+    def _pop_napari_layer_data(self, mod_tag: str) -> None:
+        ld = self.layer_data.pop(mod_tag)
+        if isinstance(ld, list):
+            for layer in ld:
+                self.viewer.layers.pop(self.viewer.layers.index(layer.name))
+        else:
+            self.viewer.layers.pop(self.viewer.layers.index(ld.name))
 
     def set_project_output_dir(self, file_path: Optional[Union[str, Path]]) -> None:
         if not file_path:
@@ -1107,7 +1127,6 @@ class WsiReg2DMain(QWidget):
                 **preprocessing
             )
             self.reg_graph.modalities[mod_tag]["channel_names"] = channel_names
-            print(preprocessing["ch_indices"])
 
     def _find_poss_path_thru_target(
         self, current_mods: List[str], source_mod: str
@@ -1411,23 +1430,30 @@ class WsiReg2DMain(QWidget):
             "remove_merged": remove_merged,
         }
 
-    def _add_registered_data_from_executed_graph(self, output_data: List[str]) -> None:
+    def _add_registered_data_from_executed_graph(
+        self, reg_graph_output: Tuple[List[str], WsiReg2D]
+    ) -> None:
+        output_data, reg_graph = reg_graph_output
         for output in output_data:
             name = Path(output).name
             if Path(output).suffix == ".geojson":
+                for k, v in reg_graph._transformed_shapes_spacings.items():
+                    if k in name:
+                        shape_spacing = v
                 shape_data = RegShapes(output)
                 (
                     shape_arrays,
                     shape_props,
                     shape_text,
                 ) = self._get_shape_data_from_reg_shapes(shape_data)
-                # figure out mod spacing...
+
                 self.viewer.add_shapes(
                     shape_arrays,
                     properties=shape_props,
                     text=shape_text,
                     shape_type="polygon",
                     name=name,
+                    scale=shape_spacing,
                 )
             else:
                 image_data = TiffFileWsiRegImage(output)
@@ -1510,7 +1536,10 @@ class WsiReg2DMain(QWidget):
             self._pbar.set_description(
                 f"Registering graph {self.reg_graph.project_name}"
             )
-            graph_runner_worker = self._run_registration(self.reg_graph, reg_opts)
+            graph_runner_worker = self._run_registration(
+                deepcopy(self.reg_graph), reg_opts
+            )
+            graph_runner_worker.started.connect(lambda: self._clear_graph("run"))
             graph_runner_worker.returned.connect(
                 self._add_registered_data_from_executed_graph
             )
@@ -1523,9 +1552,11 @@ class WsiReg2DMain(QWidget):
             self._threadpool.start(graph_runner_worker)
 
     @thread_worker
-    def _run_registration(self, reg_graph: WsiReg2D, reg_opts: dict) -> List[str]:
+    def _run_registration(
+        self, reg_graph: WsiReg2D, reg_opts: dict
+    ) -> Tuple[List[str], WsiReg2D]:
         output_data = wsireg2d_main(reg_graph, **reg_opts)
-        return output_data
+        return output_data, reg_graph
 
     def _add_graph_item_to_queue(self, reg_graph: WsiReg2D, reg_opts: dict) -> None:
         queue_item = reg_queue_item(reg_graph, reg_opts)
@@ -1561,6 +1592,7 @@ class WsiReg2DMain(QWidget):
                 self._add_graph_item_to_queue(
                     deepcopy(self.reg_graph), deepcopy(reg_opts)
                 )
+                self._clear_graph("queue")
 
     def _set_running_queue_label(self, running_data):
         self.progress_label.setText(running_data)
@@ -1611,17 +1643,20 @@ class WsiReg2DMain(QWidget):
             msg.setWindowModality(Qt.NonModal)
             msg.exec_()
             return
+        if self.queue_list.count() > 0:
 
-        to_send = []
-        for item_idx in range(self.queue_list.count()):
-            queue_item = self.queue_list.item(item_idx)
-            if not queue_item.finished:
-                to_send.append(queue_item)
-
-        self._pbar = progress(total=len(to_send))
-        for queue_item in to_send:
-            self._send_graph_to_execution(queue_item)
-        self._n_graphs_registered = 0
+            to_send = []
+            for item_idx in range(self.queue_list.count()):
+                queue_item = self.queue_list.item(item_idx)
+                if not queue_item.finished:
+                    to_send.append(queue_item)
+            self._pbar = progress(total=len(to_send))
+            for queue_item in to_send:
+                self._send_graph_to_execution(queue_item)
+            self._n_graphs_registered = 0
+        else:
+            emsg = QErrorMessage(self)
+            emsg.showMessage("There are no items in the queue to run.")
 
     def save_graph_config(self):
         if self._check_proj_info():
@@ -1646,6 +1681,36 @@ class WsiReg2DMain(QWidget):
 
             if filename:
                 self.reg_graph.save_config(output_file_path=filename, registered=False)
+
+    def _clear_graph(self, event: str = "clear"):
+        # quick check for accidental press
+        if event == "clear":
+            ok_to_clear = QMessageBox(self)
+            continue_clear = ok_to_clear.question(
+                self,
+                "Clear graph?",
+                "Do you sure you want to clear the registration graph?",
+            )
+            if continue_clear != QMessageBox.Yes:
+                return
+
+        self.mod_list.selectAll()
+        self.delete_modality(warn=False)
+
+        self.reg_graph: WsiReg2D = WsiReg2D(None, None)
+        self.graph_queue: List[Tuple[WsiReg2D, Dict[str, bool]]] = []
+
+        self.image_mods: List[str] = []
+        self.attachment_mods: List[str] = []
+        self.shape_mods: List[str] = []
+        self.merge_mods: Dict[str, List[str]] = dict()
+        self.mask_mods: Dict[str, str] = dict()
+
+        self.image_data: Dict[str, WsiRegImage] = dict()
+        self.layer_data: Dict[str, Any] = dict()
+        self.image_spacings: Dict[str, float] = dict()
+        self.attachment_keys: Dict[str, List[str]] = dict()
+        self.project_name_entry.setText("")
 
     def closeEvent(self, _) -> None:
         self._temp_dir.cleanup()

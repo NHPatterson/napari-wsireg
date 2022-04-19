@@ -11,6 +11,7 @@ from qtpy.QtWidgets import (
     QFormLayout,
 )
 from qtpy.QtGui import QColor
+from qtpy.QtCore import Qt
 from wsireg import WsiReg2D
 
 
@@ -25,6 +26,7 @@ class QRegGraphListItem(QListWidgetItem):
         self.queue_tag = queue_tag
         self.reg_graph = reg_graph
         self.reg_options = reg_options
+        self.setFlags(self.flags() | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled)
         self.finished = False
 
     def _set_finished(self):
