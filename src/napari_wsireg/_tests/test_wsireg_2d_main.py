@@ -9,7 +9,7 @@ HERE = Path(os.path.dirname(__file__))
 
 
 REASON = "private data"
-SKIP_PRIVATE = False
+SKIP_PRIVATE = True
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -45,8 +45,6 @@ def wsi_reg_fixture(make_napari_viewer):
     return wsireg2d
 
 
-# make_napari_viewer is a pytest fixture that returns a napari viewer object
-# capsys is a pytest fixture that captures stdout and stderr output streams
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_WsiReg2DMain_add_modalities(wsi_reg_fixture, capsys):
 
