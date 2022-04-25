@@ -29,6 +29,10 @@ class RegistrationPathControl(QWidget):
         self.thru_select = QComboBox()
         self.target_select = QComboBox()
 
+        self.source_select.setFixedWidth(160)
+        self.thru_select.setFixedWidth(160)
+        self.target_select.setFixedWidth(160)
+
         self.reg_models = QComboBox()
         self.add_reg_model = QPushButton("Add reg model")
         self.clear_all_paths = QPushButton("Clear reg paths")

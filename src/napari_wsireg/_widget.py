@@ -467,12 +467,16 @@ class WsiReg2DMain(QWidget):
         mod_tag: str,
         image_data: Union[TiffFileWsiRegImage, CziWsiRegImage],
         use_thumbnail: bool = False,
+        attachment_mod: Optional[str] = None,
     ):
         self._pbar = progress(total=0)
         self._pbar.set_description(f"reading {mod_tag} image")
 
         micro_reader_worker = self._prepare_image_data(
-            mod_tag, image_data, use_thumbnail=use_thumbnail
+            mod_tag,
+            image_data,
+            use_thumbnail=use_thumbnail,
+            attachment_mod=attachment_mod,
         )
         micro_reader_worker.start()
         micro_reader_worker.returned.connect(self._add_image_to_viewer)
@@ -487,11 +491,18 @@ class WsiReg2DMain(QWidget):
         mod_tag: str,
         image_data: Union[TiffFileWsiRegImage, CziWsiRegImage],
         use_thumbnail: bool = False,
+        attachment_mod: Optional[str] = None,
     ):
+        if attachment_mod:
+            image_data._pixel_spacing = (
+                self.image_spacings[attachment_mod],
+                self.image_spacings[attachment_mod],
+            )
         if isinstance(image_data, TiffFileWsiRegImage) or not use_thumbnail:
             image_data.prepare_image_data()
         elif isinstance(image_data, CziWsiRegImage) and use_thumbnail:
             image_data._get_thumbnail()
+
         return mod_tag, image_data, use_thumbnail
 
     def _add_image_to_viewer(
@@ -599,6 +610,7 @@ class WsiReg2DMain(QWidget):
                     mod_tag,
                     image_data,
                     use_thumbnail=added_mod.use_thumbnail.isChecked(),
+                    attachment_mod=attachment_modality,
                 )
                 self.reg_graph.add_attachment_images(
                     attachment_modality, mod_tag, file_path, mod_spacing
@@ -1068,9 +1080,10 @@ class WsiReg2DMain(QWidget):
                 except ValueError:
                     continue
                 self.mod_list.takeItem(rm_idx)
-
-                ld = self.layer_data.pop(assoc_mod)
-                self.viewer.layers.pop(self.viewer.layers.index(ld.name))
+                try:
+                    self._pop_napari_layer_data(assoc_mod)
+                except KeyError:
+                    continue
 
                 if assoc_mod in self.attachment_mods:
                     self.attachment_mods.pop(self.attachment_mods.index(assoc_mod))
@@ -1079,20 +1092,18 @@ class WsiReg2DMain(QWidget):
                 elif assoc_mod in self.shape_mods:
                     self.shape_mods.pop(self.shape_mods.index(assoc_mod))
 
-            if len(associated_mods) > 0:
+            if len(all_associated_mods) > 0:
                 if warn:
                     msg = QMessageBox(self)
                     msg.setIcon(QMessageBox.Warning)
                     msg.setText("Associated modality has been removed")
                     msg.setInformativeText(
-                        f"<b>{mod_tag}</b> had assoicated data with tag(s) <b>{', '.join(associated_mods)}</b> and"
-                        f" <b>{', '.join(associated_mods)}</b> was(were) removed\n"
+                        f"<b>{mod_tag}</b> had assoicated data with tag(s) <b>{', '.join(all_associated_mods)}</b> and"
+                        f" <b>{', '.join(all_associated_mods)}</b> was(were) removed\n"
                         f"<i>N.B.</i>: wsireg attachment modalities cannot be specified unattached"
                     )
                     msg.setWindowModality(Qt.NonModal)
-                    msg.setWindowTitle(
-                        f"{mod_tag} - associated data removal warning: {assoc_mod}"
-                    )
+                    msg.setWindowTitle(f"{mod_tag} - associated data removal warning")
                     msg.exec_()
 
             for item in self.mod_list.selectedItems():
@@ -1489,7 +1500,6 @@ class WsiReg2DMain(QWidget):
                     self.reg_graph.output_dir
                     / f"{self.reg_graph.project_name}-{image_name}-from-napari-layer.tiff"
                 )
-                print(output_fp)
                 output_image_fp = write_image_from_napari(
                     self.layer_data[image_name].data, output_fp
                 )

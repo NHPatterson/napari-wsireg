@@ -12,6 +12,7 @@ from qtpy.QtWidgets import (
     QWidget,
     QLabel,
 )
+from qtpy.QtCore import Qt
 from napari_wsireg.gui.utils.colors import ATTACHMENTS_COL, IMAGES_COL, SHAPES_COL
 
 
@@ -113,7 +114,26 @@ class ModalityControl(QWidget):
         # btn_layout.addWidget(self.del_mod_btn)
         # btn_layout.addWidget(self.edt_mod_btn)
         widg_layout.addLayout(btn_layout)
-        widg_layout.addWidget(self.mod_list)
+
+        # mod list layout with header
+        mod_list_layout = QVBoxLayout()
+        mod_list_header_font = QFont("Arial", 12)
+        mod_list_header_font.setItalic(True)
+        mod_list_header_font.setBold(True)
+
+        mod_list_header = QLabel()
+        mod_list_header.setFont(mod_list_header_font)
+        mod_list_header.setText("Graph images, attachments, & shapes")
+        mod_list_header.setText(
+            f'<font color="{IMAGES_COL}"><b>images</b></font> | '
+            f'<font color="{ATTACHMENTS_COL}"><b>attachments</b> '
+            f'</font>| <font color="{SHAPES_COL}"><b>shapes</b></font> | masks'
+        )
+
+        mod_list_layout.addWidget(mod_list_header)
+        mod_list_header.setAlignment(Qt.AlignCenter)
+        mod_list_layout.addWidget(self.mod_list)
+        widg_layout.addLayout(mod_list_layout)
 
         nap_header = QLabel()
         nap_header.setText("<b>From <i>napari</i></b>")

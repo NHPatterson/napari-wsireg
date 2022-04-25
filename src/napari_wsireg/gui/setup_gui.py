@@ -1,7 +1,9 @@
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QFont
+from qtpy.QtSvg import QSvgWidget
 from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget, QTabWidget
 from superqt.collapsible import QCollapsible
+
+from pathlib import Path
 
 from napari_wsireg.gui.setup_sub.modality import ModalityControl
 from napari_wsireg.gui.setup_sub.paths import RegistrationPathControl
@@ -10,26 +12,22 @@ from napari_wsireg.gui.setup_sub.project import ProjectControl
 from napari_wsireg.gui.setup_sub.graph import RegGraphViewer
 from napari_wsireg.gui.queue import QueueControl
 
-from napari_wsireg.gui.utils.colors import ATTACHMENTS_COL, IMAGES_COL, SHAPES_COL
-
 
 class SetupTab(QWidget):
     def __init__(self, parent=None):
         super().__init__()
         setup_layout = QVBoxLayout()
-        setup_layout.setSpacing(10)
+        # setup_layout.setSpacing(10)
         setup_layout.addStretch()
         setup_layout.setAlignment(Qt.AlignTop)
         self.setLayout(setup_layout)
         mod_header = QLabel()
-        mod_header.setText(
-            f'<font color="{IMAGES_COL}"><b>Registration images</b></font> | '
-            f'<font color="{ATTACHMENTS_COL}"><b>Attachment images</b> '
-            f'</font>| <font color="{SHAPES_COL}"><b>Attachment shapes</b></font>'
-        )
 
-        mod_header.setFont(QFont("Arial", 14))
         mod_header.setAlignment(Qt.AlignTop)
+        wsireg_logo_path_svg = str(Path(__file__).parent / "resources/wsireg-logo.svg")
+        wsireg_logo = QSvgWidget(wsireg_logo_path_svg)
+        wsireg_logo.setFixedWidth(224)
+        wsireg_logo.setFixedHeight(72)
 
         self.mod_ctrl = ModalityControl()
         self.prepro_ctrl = PreprocessingControl()
@@ -38,8 +36,8 @@ class SetupTab(QWidget):
         self.proj_ctrl = ProjectControl()
         self.queue_ctrl = QueueControl()
 
-        self.layout().addWidget(mod_header)
-        self.layout().setAlignment(mod_header, Qt.AlignTop)
+        self.layout().addWidget(wsireg_logo)
+        self.layout().setAlignment(wsireg_logo, Qt.AlignCenter | Qt.AlignTop)
 
         self.layout().addWidget(self.mod_ctrl)
         self.layout().setAlignment(self.mod_ctrl, Qt.AlignTop)

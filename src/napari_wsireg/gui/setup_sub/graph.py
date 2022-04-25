@@ -202,7 +202,6 @@ class RegGraphViewer(QWidget):
             if len(path_targets) > 1:
                 for idx, cont_src in enumerate(path_targets[:-1]):
                     current, target = cont_src, path_targets[idx + 1]
-                    print(current, target)
                     self.graph_plot.axes.annotate(
                         "",
                         xy=pos[current],

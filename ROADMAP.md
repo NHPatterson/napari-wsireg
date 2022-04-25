@@ -14,17 +14,22 @@
 - [x] in-memory-np-array image to wsireg
   - [x] Implement saving the image with metadata
 - [x] Channel selection
-- [ ] Clear all info on adding graph to queue, graph completion or "Clear" button
+- [x] Clear all info on adding graph to queue, graph completion or "Clear" button
 
 
 ## Priority Level 2
-- [x] Queueing system
+- [ ] Queueing system
   - [x] Queue GUI
   - [x] Smart thread worker
+  - [ ] Access queue graphs (i.e., round trip from data model to GUI)
 
 - [ ] Monitoring
-  - [ ] See plots
+  - [x] Store plots in np arrays after execution (`wsireg` update)
+  - [ ] Visualize plots from executed graph
 
 
 ## Priority Level 3
 - [ ] GUI for serial 3D experiments
+- [ ] Interface to use shape data to evaluate registration quality
+  - [ ] GUI to load in registered shape data
+  - [ ] Compute DICE / Jaccard etc
