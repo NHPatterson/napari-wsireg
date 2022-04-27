@@ -17,6 +17,7 @@ Plugin to perform whole slide image registration based on wsireg.
 
 Please see [wsireg](https://github.com/nhpatterson/wsireg) for more info image formats, features and how registration works.
 
+
 ## Usage
 
 Add images from napari layers or from file and set up "registration paths" between them. OME-TIFF is best supported format.
