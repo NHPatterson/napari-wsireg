@@ -1003,6 +1003,7 @@ class WsiReg2DMain(QWidget):
         self._update_reg_plot()
 
     def _clear_attachment_keys(self, attachment_key: str) -> None:
+
         for k, v in self.attachment_keys.items():
             if attachment_key in v:
                 v.pop(v.index(attachment_key))
