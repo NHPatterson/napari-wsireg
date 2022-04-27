@@ -1,6 +1,6 @@
 # napari-wsireg
 
-![Alt text](src/napari_wsireg/gui/resources/wsireg-logo.svg?raw=true "wsireg")
+![Alt text](https://github.com/NHPatterson/napari-wsireg/blob/main/src/napari_wsireg/gui/resources/wsireg-logo-light.svg?raw=true "wsireg")
 
 [//]: # ([![License]&#40;https://img.shields.io/pypi/l/napari-wsireg.svg?color=green&#41;]&#40;https://github.com/nhpatterson/napari-wsireg/raw/main/LICENSE&#41;)
 
