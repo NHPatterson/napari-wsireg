@@ -2,7 +2,6 @@ labels:
   ontology: EDAM-BIOIMAGING:alpha06
   terms:
   - 2D image
-  - Visualisation
   - Image registration
   - Affine registration
   - Rigid registration
