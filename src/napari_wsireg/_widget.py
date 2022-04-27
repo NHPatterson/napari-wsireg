@@ -197,6 +197,7 @@ class WsiReg2DMain(QWidget):
         self.add_reg_model.clicked.connect(self._add_reg_model_to_path)
 
         self.path_ctrl.add_reg_path.clicked.connect(self.add_reg_path_to_graph)
+        self.path_ctrl.clear_all_paths.clicked.connect(self.clear_all_reg_paths)
 
         self.graph_view.refresh_graph.clicked.connect(self._update_reg_plot)
 
@@ -985,6 +986,22 @@ class WsiReg2DMain(QWidget):
         )
         self._update_reg_plot()
 
+    def clear_all_reg_paths(self) -> None:
+        # quick check for accidental press
+        ok_to_clear = QMessageBox(self)
+        continue_clear = ok_to_clear.question(
+            self,
+            "Clear all reg paths?",
+            "Are you sure you want to clear all registration paths?",
+        )
+        if continue_clear != QMessageBox.Yes:
+            return
+
+        for modality in self.reg_graph.modality_names:
+            self.reg_graph._remove_reg_paths(modality)
+
+        self._update_reg_plot()
+
     def _clear_attachment_keys(self, attachment_key: str) -> None:
         for k, v in self.attachment_keys.items():
             if attachment_key in v:
@@ -1699,7 +1716,7 @@ class WsiReg2DMain(QWidget):
             continue_clear = ok_to_clear.question(
                 self,
                 "Clear graph?",
-                "Do you sure you want to clear the registration graph?",
+                "Are you sure you want to clear the registration graph?",
             )
             if continue_clear != QMessageBox.Yes:
                 return
