@@ -1,5 +1,7 @@
 # napari-wsireg
 
+![Alt text](src/napari_wsireg/gui/resources/wsireg-logo.svg?raw=true "wsireg")
+
 [//]: # ([![License]&#40;https://img.shields.io/pypi/l/napari-wsireg.svg?color=green&#41;]&#40;https://github.com/nhpatterson/napari-wsireg/raw/main/LICENSE&#41;)
 
 [//]: # ([![PyPI]&#40;https://img.shields.io/pypi/v/napari-wsireg.svg?color=green&#41;]&#40;https://pypi.org/project/napari-wsireg&#41;)
@@ -8,23 +10,16 @@
 
 [//]: # ([![tests]&#40;https://github.com/nhpatterson/napari-wsireg/workflows/tests/badge.svg&#41;]&#40;https://github.com/nhpatterson/napari-wsireg/actions&#41;)
 
-[//]: # ([![codecov]&#40;https://codecov.io/gh/nhpatterson/napari-wsireg/branch/main/graph/badge.svg&#41;]&#40;https://codecov.io/gh/nhpatterson/napari-wsireg&#41;)
-
 [//]: # ([![napari hub]&#40;https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-wsireg&#41;]&#40;https://napari-hub.org/plugins/napari-wsireg&#41;)
 
-Plugin to perform whole slide image registration based on wsireg. This repo is a work and progress and this plugin is not yet functional.
 
-----------------------------------
+Plugin to perform whole slide image registration based on wsireg.
 
-This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template.
+Please see [wsireg](https://github.com/nhpatterson/wsireg) for more info image formats, features and how registration works.
 
-<!--
-Don't miss the full getting started guide to set up your new package:
-https://github.com/napari/cookiecutter-napari-plugin#getting-started
+## Usage
 
-and review the napari docs for plugin developers:
-https://napari.org/plugins/stable/index.html
--->
+Add images from napari layers or from file and set up "registration paths" between them. OME-TIFF is best supported format.
 
 ## Installation
 

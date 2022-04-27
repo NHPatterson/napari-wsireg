@@ -1,0 +1,13 @@
+labels:
+  ontology: EDAM-BIOIMAGING:alpha06
+  terms:
+  - 2D image
+  - Visualisation
+  - Image registration
+  - Affine registration
+  - Rigid registration
+  - Deformable registration
+  - Intensity-based registration
+  - Tissue image analysis
+  - Multi-channel image
+  - Fluorescence microscopy
