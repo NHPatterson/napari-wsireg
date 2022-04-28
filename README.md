@@ -22,6 +22,13 @@ Please see [wsireg](https://github.com/nhpatterson/wsireg) for more info image f
 
 Add images from napari layers or from file and set up "registration paths" between them. OME-TIFF is best supported format.
 
+### Constructed registration graph in action
+
+![Alt Text](assets/graph_in_action.gif)
+_Solid arrows_: direct registration between two images.
+
+_Dashed arrows_: indriect registration paths.
+
 ## Installation
 
 You can install `napari-wsireg` via [pip]:
