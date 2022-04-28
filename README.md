@@ -25,6 +25,8 @@ Add images from napari layers or from file and set up "registration paths" betwe
 ### Constructed registration graph in action
 
 ![Alt Text](assets/graph_in_action.gif)
+
+
 _Solid arrows_: direct registration between two images.
 
 _Dashed arrows_: indriect registration paths.
