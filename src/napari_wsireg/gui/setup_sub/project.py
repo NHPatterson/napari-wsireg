@@ -6,6 +6,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QCheckBox,
+    QComboBox,
 )
 from superqt import QCollapsible
 
@@ -31,6 +32,9 @@ class ProjectControl(QWidget):
         self.non_reg_image_check = QCheckBox()
         self.write_merge_and_indiv_check = QCheckBox()
         self.write_images_check = QCheckBox()
+        self.image_writer = QComboBox()
+        self.image_writer.addItem("OME-TIFF (by plane)")
+        self.image_writer.addItem("OME-TIFF (by tile)")
 
         self.orig_size_check.setChecked(False)
         self.non_reg_image_check.setChecked(True)
@@ -41,6 +45,7 @@ class ProjectControl(QWidget):
         proj_entry_layout.addRow("Set project name", self.project_name_entry)
         proj_entry_layout.addRow(self.output_dir_select, self.output_dir_entry)
         proj_entry_layout.addRow("Write transformed images", self.write_images_check)
+        proj_entry_layout.addRow("Image writer", self.image_writer)
 
         adv_opts = QCollapsible("Advanced project options")
         adv_opts_widget = QWidget()
