@@ -25,7 +25,7 @@ from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.reg_shapes import RegShapes
 from wsireg.wsireg2d import WsiReg2D
-from wsireg.wsireg2d import main as wsireg2d_main
+from wsireg.wsireg2d import wsireg_run as wsireg2d_main
 from wsireg.utils.im_utils import ARRAYLIKE_CLASSES
 from napari_wsireg.data import (
     FILE_ERROR_MESSAGE,
@@ -1451,11 +1451,18 @@ class WsiReg2DMain(QWidget):
 
         remove_merged = False if write_merge_and_indiv_check else True
 
+        # future: make this an enum
+        if self.setup.proj_ctrl.image_writer.currentText() == "OME-TIFF (by plane)":
+            file_writer = "ome.tiff"
+        else:
+            file_writer = "ome.tiff-bytile"
+
         return {
             "write_images": write_images,
             "to_original_size": to_original_size,
             "transform_non_reg": transform_non_reg,
             "remove_merged": remove_merged,
+            "file_writer": file_writer,
         }
 
     def _add_registered_data_from_executed_graph(
