@@ -515,13 +515,19 @@ class WsiReg2DMain(QWidget):
             channel_names = mod_tag
         if use_thumbnail:
             thumbnail_im = image_data.thumbnail.compute()
+
+            if image_data.is_rgb:
+                channel_axis = None
+            else:
+                channel_axis = image_data.channel_axis
+                if len(thumbnail_im.shape) == 2:
+                    thumbnail_im = np.expand_dims(thumbnail_im, 0)
+
             self.layer_data.update(
                 {
                     mod_tag: self.viewer.add_image(
                         thumbnail_im,
-                        channel_axis=None
-                        if image_data.is_rgb
-                        else image_data.channel_axis,
+                        channel_axis=channel_axis,
                         name=channel_names,
                         scale=image_data.thumbnail_spacing,
                         rgb=image_data.is_rgb,
