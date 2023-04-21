@@ -28,7 +28,7 @@ class QChannelItem(QListWidgetItem):
         self.channel_name = channel_name
         self.setText(self.channel_name)
         self.setFlags(self.flags() | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
-        self.setCheckState(1)
+        self.setCheckState(Qt.CheckState.Checked)
 
 
 class PreprocessingControl(QGroupBox):
@@ -169,20 +169,20 @@ class PreprocessingControl(QGroupBox):
         if check_status and channel_names:
             for channel, status in zip(channel_names, check_status):
                 ch_item = QChannelItem(channel)
-                status_flag = 2 if status else 0
+                status_flag = Qt.CheckState.Checked if status else Qt.CheckState.Unchecked
                 ch_item.setCheckState(status_flag)
                 self.channel_list.addItem(ch_item)
         elif check_status:
             channel_names = [f"C{str(i).zfill(2)}" for i in range(len(check_status))]
             for channel, status in zip(channel_names, check_status):
                 ch_item = QChannelItem(channel)
-                status_flag = 2 if status else 0
+                status_flag = Qt.CheckState.Checked if status else Qt.CheckState.Unchecked
                 ch_item.setCheckState(status_flag)
                 self.channel_list.addItem(ch_item)
         else:
             for channel in channel_names:
                 ch_item = QChannelItem(channel)
-                ch_item.setCheckState(2)
+                ch_item.setCheckState(Qt.CheckState.Checked)
                 self.channel_list.addItem(ch_item)
 
     def _ch_indices_to_status(self, channel_names: List[str], ch_indices: List[int]):
